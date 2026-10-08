@@ -1,0 +1,1152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Puzzle 2048 Demo</title>
+<style>
+  :root {
+    --bg: #faf8ef; --board: #bbada0; --cell: #cdc1b4; --text: #776e65;
+    /* Board size also fits the window height: header, goal bar, buttons and hint need ~150px + 15% of it. */
+    --size: min(88vw, 460px, calc((100vh - 150px) / 1.15)); --gap: calc(var(--size) * 0.03);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif; overscroll-behavior: none; touch-action: none; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2vmin; }
+  header { width: var(--size); display: flex; align-items: flex-end; justify-content: space-between; }
+  h1 { margin: 0; font-size: calc(var(--size) * 0.09); }
+  .level { font-size: 14px; font-weight: 700; opacity: .7; }
+  .goal { width: var(--size); background: #8f7a66; color: #fff; border-radius: 8px; padding: 10px 14px;
+    display: flex; justify-content: space-between; align-items: center; font-weight: 700; }
+  .goal .target { background: #edc22e; color: #fff; border-radius: 6px; padding: 2px 10px; margin-left: 6px; }
+  #board { position: relative; flex-shrink: 0; width: var(--size); height: var(--size); background: var(--board); border-radius: 8px; }
+  .cell, .tile, .debris { position: absolute; border-radius: 6px; width: calc((var(--size) - var(--gap) * 5) / 4); height: calc((var(--size) - var(--gap) * 5) / 4); }
+  .cell { background: var(--cell); }
+  .cell.hole { background: #8a7d72; box-shadow: inset 0 3px 8px rgba(0,0,0,.45); }
+  #board { transition: box-shadow 400ms ease; }
+  #board.lost { box-shadow: 0 0 0 5px #f28b30, 0 0 24px 4px rgba(242,139,48,.55); }
+  #rewind { background: #f28b30; }
+  /* Unwinnable board: Undo turns orange and pulses, the hint becomes a warning. */
+  #undo.urge { background: #f28b30; animation: urge 1.3s ease-in-out infinite; }
+  @keyframes urge { 50% { transform: scale(1.06); box-shadow: 0 0 0 6px rgba(242,139,48,.3); } }
+  .hint.warn { color: #d9711c; font-weight: 700; opacity: 1; animation: fadein 400ms ease; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .tile { display: flex; align-items: center; justify-content: center; font-weight: 800;
+    font-size: calc(var(--size) * 0.09); transition: left 110ms ease-in-out, top 110ms ease-in-out; }
+  #board.resizing .tile { transition: none; }
+  /* Ice block, mobile-game style. ::after = ice body (texture, depth, bevel)
+     under the number; ::before = cracks, gloss and a glint that sweeps across
+     every few seconds, over the number. Both fade out when the tile melts. */
+  .tile::before, .tile::after { content: ''; position: absolute; inset: 0; border-radius: 7px; opacity: 0;
+    pointer-events: none; transition: opacity 300ms ease 110ms; }
+  .tile::after { z-index: -1;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='4'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .55 -.18'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url%28%23n%29'/%3E%3C/svg%3E") center / 100% 100%,
+      radial-gradient(ellipse 90% 60% at 35% 20%, rgba(200,240,255,.9), rgba(200,240,255,0) 70%),
+      linear-gradient(165deg, #a8e6ff 0%, #5db4e8 45%, #2f86c6 80%, #2370ad 100%);
+    box-shadow: inset 0 0 0 2px rgba(215,245,255,.95), inset 0 4px 0 rgba(255,255,255,.55),
+      inset 0 -6px 0 rgba(12,55,95,.35), inset 0 0 18px rgba(170,230,255,.75); }
+  .tile::before { z-index: 1;
+    background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.7) 50%, transparent 58%) 160% 0 / 250% 100% no-repeat,
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M100 22 L76 34 L67 28 L50 50 L32 55 L20 76 L0 84' stroke='%23164a75' stroke-width='3' opacity='.45' transform='translate%281 1.5%29'/%3E%3Cpath d='M67 28 L71 13 M50 50 L57 67 L53 82 M32 55 L23 45 M76 34 L86 44' stroke='%23164a75' stroke-width='2' opacity='.35' transform='translate%281 1.5%29'/%3E%3Cpath d='M100 22 L76 34 L67 28 L50 50 L32 55 L20 76 L0 84' stroke='white' stroke-width='1.8' opacity='.95'/%3E%3Cpath d='M67 28 L71 13 M50 50 L57 67 L53 82 M32 55 L23 45 M76 34 L86 44' stroke='white' stroke-width='1.1' opacity='.75'/%3E%3C/g%3E%3Cpath d='M8 8 Q8 5 12 5 H58 Q40 12 26 22 Q14 30 8 40 Z' fill='white' opacity='.45'/%3E%3Cpath d='M14 12 L26 12' stroke='white' stroke-width='3.5' stroke-linecap='round' opacity='.9'/%3E%3Cpath d='M92 92 L84 92 L92 84 Z' fill='white' opacity='.5'/%3E%3Cg fill='white'%3E%3Ccircle cx='82' cy='72' r='2.6' opacity='.7'/%3E%3Ccircle cx='89' cy='80' r='1.6' opacity='.6'/%3E%3Ccircle cx='17' cy='88' r='1.8' opacity='.55'/%3E%3C/g%3E%3C/svg%3E") center / 100% 100% no-repeat; }
+  .tile { isolation: isolate; }
+  .tile.ice::before, .tile.ice::after { opacity: 1; transition: none; }
+  .tile.ice::before { animation: glint 3.6s ease-in-out infinite; }
+  @keyframes glint { 0%, 55% { background-position: 160% 0, center; } 80%, 100% { background-position: -60% 0, center; } }
+  .tile.ice { color: #fff !important;
+    text-shadow: 0 2px 0 #174f80, 0 -1px 0 #174f80, 2px 0 0 #174f80, -2px 0 0 #174f80, 0 0 12px rgba(140,220,255,.95);
+    box-shadow: 0 5px 0 #1b5a8c, 0 0 14px rgba(110,200,255,.55), 0 9px 12px rgba(15,50,90,.4); transform: translateY(-4px); }
+  /* ×2 joker: a gold block with sparkles, same build as the ice block. */
+  .tile.joker::before, .tile.joker::after { opacity: 1; transition: none; }
+  .tile.joker::after { background: radial-gradient(ellipse 90% 60% at 35% 20%, rgba(255,250,215,.95), rgba(255,250,215,0) 70%),
+      linear-gradient(165deg, #fff1a8 0%, #ffd34d 40%, #f5ab0b 80%, #e0900a 100%);
+    box-shadow: inset 0 0 0 2px rgba(255,248,210,.95), inset 0 4px 0 rgba(255,255,255,.5),
+      inset 0 -6px 0 rgba(140,80,0,.3), inset 0 0 16px rgba(255,240,180,.7); }
+  .tile.joker::before { animation: glint 3.6s ease-in-out infinite;
+    background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.75) 50%, transparent 58%) 160% 0 / 250% 100% no-repeat,
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M8 8 Q8 5 12 5 H58 Q40 12 26 22 Q14 30 8 40 Z' fill='white' opacity='.4'/%3E%3Cpath d='M14 12 L26 12' stroke='white' stroke-width='3.5' stroke-linecap='round' opacity='.9'/%3E%3Cpath d='M84 9 L86.52 15.48 L93 18 L86.52 20.52 L84 27 L81.48 20.52 L75 18 L81.48 15.48 Z' fill='white' opacity='0.95'/%3E%3Cpath d='M16 78 L17.68 82.32 L22 84 L17.68 85.68 L16 90 L14.32 85.68 L10 84 L14.32 82.32 Z' fill='white' opacity='0.8'/%3E%3Cpath d='M76 80 L77.12 82.88 L80 84 L77.12 85.12 L76 88 L74.88 85.12 L72 84 L74.88 82.88 Z' fill='white' opacity='0.7'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
+  .tile.joker { color: #fff !important; font-size: calc(var(--size) * 0.085);
+    text-shadow: 0 2px 0 #9a5800, 0 -1px 0 #9a5800, 2px 0 0 #9a5800, -2px 0 0 #9a5800, 0 0 12px rgba(255,220,120,.95);
+    box-shadow: 0 5px 0 #b06e00, 0 0 16px rgba(255,190,40,.65), 0 9px 12px rgba(110,60,0,.35); transform: translateY(-4px); }
+  /* Stone: a carved rock wall with grit, cracked after the first hit. */
+  .tile.stone::before, .tile.stone::after { opacity: 1; transition: none; }
+  .tile.stone::after { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.3' numOctaves='3' seed='9'/%3E%3CfeColorMatrix values='0 0 0 0 .2  0 0 0 0 .16  0 0 0 0 .12  0 0 0 1.1 -.45'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url%28%23n%29'/%3E%3C/svg%3E") center / 100% 100%,
+      radial-gradient(ellipse 90% 60% at 35% 20%, rgba(235,228,218,.6), rgba(235,228,218,0) 70%),
+      linear-gradient(165deg, #bdb3a7 0%, #998e82 45%, #7b7065 85%, #6c6258 100%);
+    box-shadow: inset 0 0 0 2px rgba(225,215,202,.55), inset 0 4px 0 rgba(255,255,255,.25),
+      inset 0 -6px 0 rgba(40,30,20,.35); }
+  .tile.stone::before { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M8 8 Q8 5 12 5 H46 Q30 12 20 20 Q12 27 8 34 Z' fill='white' opacity='.22'/%3E%3Cg fill='%234a423b' opacity='.45'%3E%3Ccircle cx='72' cy='24' r='3'/%3E%3Ccircle cx='28' cy='70' r='2.4'/%3E%3Ccircle cx='80' cy='78' r='1.8'/%3E%3Ccircle cx='50' cy='46' r='1.4'/%3E%3C/g%3E%3Cg fill='white' opacity='.35'%3E%3Ccircle cx='73' cy='22.5' r='1.2'/%3E%3Ccircle cx='29' cy='68.8' r='1'/%3E%3C/g%3E%3C/svg%3E") center / 100% 100% no-repeat; }
+  .tile.stone.cracked::before { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M50 6 L44 26 L54 40 L40 56 L48 72 L38 94 M54 40 L72 46 L86 40 M40 56 L22 60 L12 52 M48 72 L66 80' stroke='white' stroke-width='2' opacity='.35' transform='translate%281 1.5%29'/%3E%3Cpath d='M50 6 L44 26 L54 40 L40 56 L48 72 L38 94 M54 40 L72 46 L86 40 M40 56 L22 60 L12 52 M48 72 L66 80' stroke='%232f2924' stroke-width='3.2'/%3E%3C/g%3E%3Cpath d='M8 8 Q8 5 12 5 H46 Q30 12 20 20 Q12 27 8 34 Z' fill='white' opacity='.18'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
+  .tile.stone { box-shadow: 0 5px 0 #564d44, 0 9px 12px rgba(40,30,20,.35); transform: translateY(-4px); }
+  .tile.stone.hit { animation: stoneHit 260ms ease 110ms; }
+  @keyframes stoneHit { 25% { transform: translate(-3px, -4px) rotate(-2deg); } 60% { transform: translate(3px, -4px) rotate(2deg); } }
+  .tile.stone.shatter { animation: shatter 260ms ease-in 110ms forwards; }
+  @keyframes shatter { to { transform: translateY(-4px) scale(.35) rotate(18deg); opacity: 0; } }
+  .debris { position: absolute; pointer-events: none; z-index: 4; }
+  .chip { position: absolute; left: 45%; top: 45%; width: 14%; height: 12%; border-radius: 2px; background: #8a7f73;
+    box-shadow: inset 1px 1px 0 rgba(255,255,255,.3); animation: chip 480ms cubic-bezier(.2,.7,.4,1) 110ms both; }
+  @keyframes chip { from { transform: none; opacity: 1; } to { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; } }
+  /* Moving wall on a rail: steel block on a track, plus a ghost marking where it goes next. */
+  .cell.track { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cg fill='%236d5f52'%3E%3Crect x='8' y='22' width='9' height='56' rx='2'/%3E%3Crect x='33' y='22' width='9' height='56' rx='2'/%3E%3Crect x='58' y='22' width='9' height='56' rx='2'/%3E%3Crect x='83' y='22' width='9' height='56' rx='2'/%3E%3C/g%3E%3Crect x='0' y='32' width='100' height='7' fill='%239aa3aa'/%3E%3Crect x='0' y='61' width='100' height='7' fill='%239aa3aa'/%3E%3Crect x='0' y='32' width='100' height='2' fill='white' opacity='.5'/%3E%3Crect x='0' y='61' width='100' height='2' fill='white' opacity='.5'/%3E%3C/svg%3E") center / 100% 100% no-repeat, var(--cell); }
+  .cell.track.v { background: var(--cell); }
+  .cell.track.v::before { content: ''; position: absolute; inset: 0; transform: rotate(90deg); background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cg fill='%236d5f52'%3E%3Crect x='8' y='22' width='9' height='56' rx='2'/%3E%3Crect x='33' y='22' width='9' height='56' rx='2'/%3E%3Crect x='58' y='22' width='9' height='56' rx='2'/%3E%3Crect x='83' y='22' width='9' height='56' rx='2'/%3E%3C/g%3E%3Crect x='0' y='32' width='100' height='7' fill='%239aa3aa'/%3E%3Crect x='0' y='61' width='100' height='7' fill='%239aa3aa'/%3E%3Crect x='0' y='32' width='100' height='2' fill='white' opacity='.5'/%3E%3Crect x='0' y='61' width='100' height='2' fill='white' opacity='.5'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
+  .tile.rail::before, .tile.rail::after { opacity: 1; transition: none; }
+  .tile.rail::after { background: linear-gradient(165deg, #c3cbd2 0%, #8e99a3 45%, #66717b 85%, #59636c 100%);
+    box-shadow: inset 0 0 0 2px rgba(230,236,240,.7), inset 0 4px 0 rgba(255,255,255,.35), inset 0 -6px 0 rgba(20,30,40,.35); }
+  .tile.rail::before { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Ccircle cx='14' cy='14' r='4.5' fill='%233f474e'/%3E%3Ccircle cx='12.8' cy='12.8' r='2' fill='white' opacity='.55'/%3E%3Ccircle cx='86' cy='14' r='4.5' fill='%233f474e'/%3E%3Ccircle cx='84.8' cy='12.8' r='2' fill='white' opacity='.55'/%3E%3Ccircle cx='14' cy='86' r='4.5' fill='%233f474e'/%3E%3Ccircle cx='12.8' cy='84.8' r='2' fill='white' opacity='.55'/%3E%3Ccircle cx='86' cy='86' r='4.5' fill='%233f474e'/%3E%3Ccircle cx='84.8' cy='84.8' r='2' fill='white' opacity='.55'/%3E%3Cpath d='M8 8 Q8 5 12 5 H46 Q30 12 20 20 Q12 27 8 34 Z' fill='white' opacity='.3'/%3E%3Cpath d='M30 50 H70' stroke='%233f474e' stroke-width='5' stroke-linecap='round' opacity='.5'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
+  .tile.rail { box-shadow: 0 5px 0 #454e56, 0 9px 12px rgba(20,30,40,.35); transform: translateY(-4px); }
+  .tile.rail.slid { transition-delay: 120ms; }
+  #railNext { position: absolute; display: none; border-radius: 7px; border: 3px dashed rgba(80,92,102,.75); z-index: 1;
+    pointer-events: none; width: calc((var(--size) - var(--gap) * 5) / 4); height: calc((var(--size) - var(--gap) * 5) / 4);
+    transition: left 200ms ease 120ms, top 200ms ease 120ms; }
+  #railNext.show { display: block; }
+  /* Mud floor: a sticky puddle. Tiles that slide in stop, sink a little and splash. */
+  .cell.mud { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.08' numOctaves='2' seed='3'/%3E%3CfeColorMatrix values='0 0 0 0 .25  0 0 0 0 .16  0 0 0 0 .08  0 0 0 1.4 -.55'/%3E%3C/filter%3E%3Crect width='100' height='100' fill='%237a5a3c'/%3E%3Crect width='100' height='100' filter='url%28%23n%29'/%3E%3Cg fill='none' stroke='%23b48a5f' stroke-width='2.5' opacity='.6'%3E%3Cellipse cx='30' cy='35' rx='9' ry='5'/%3E%3Cellipse cx='68' cy='68' rx='12' ry='6'/%3E%3C/g%3E%3Cg fill='%23c49a6c' opacity='.55'%3E%3Ccircle cx='70' cy='28' r='3'/%3E%3Ccircle cx='24' cy='72' r='2.2'/%3E%3C/g%3E%3C/svg%3E") center / 100% 100%; box-shadow: inset 0 3px 8px rgba(40,20,5,.5); }
+  .cell.mud::after { content: ''; position: absolute; left: 22%; top: 46%; width: 12%; height: 12%; border-radius: 50%;
+    border: 2px solid rgba(220,180,130,.7); animation: bubble 2.6s ease-out infinite; }
+  @keyframes bubble { 0% { transform: scale(.2); opacity: 0; } 30% { opacity: 1; } 100% { transform: scale(1.6) translateY(-30%); opacity: 0; } }
+  .tile.inmud { box-shadow: inset 0 -10px 0 rgba(95,62,32,.55); }
+  .tile.splash { animation: splash 300ms ease 110ms; }
+  @keyframes splash { 40% { transform: scale(1.08, .88) translateY(4%); } }
+  @media (prefers-reduced-motion: reduce) { .cell.mud::after { animation: none; } }
+  /* Chains (style A6 + thick outline C2): silver links crossed in an X under the number, casting a
+     shadow on a bevelled tile, with a gold padlock. They fade out and links
+     scatter when a matching tile breaks them. */
+  .tile.chain::before { opacity: 1; transition: none; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='m' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23f4f7f9'/%3E%3Cstop offset='.45' stop-color='%23a9b3bc'/%3E%3Cstop offset='1' stop-color='%235d6873'/%3E%3C/linearGradient%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23ffe48a'/%3E%3Cstop offset='.5' stop-color='%23f0b429'/%3E%3Cstop offset='1' stop-color='%23b27a0c'/%3E%3C/linearGradient%3E%3Cfilter id='s' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeDropShadow dx='0' dy='1.6' stdDeviation='1.2' flood-color='%23000' flood-opacity='.45'/%3E%3C/filter%3E%3C/defs%3E%3Cg transform='translate%281.5 3%29' opacity='0.35'%3E%3Cg transform='translate%289.1 9.1%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2819.3 19.3%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2829.6 29.6%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2839.8 39.8%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2850.0 50.0%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2860.2 60.2%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2870.4 70.4%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2880.7 80.7%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2890.9 90.9%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2890.9 9.1%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2880.7 19.3%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2870.4 29.6%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2860.2 39.8%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2850.0 50.0%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2839.8 60.2%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2829.6 70.4%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2819.3 80.7%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%289.1 90.9%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3C/g%3E%3Cg filter='url%28%23s%29'%3E%3Cg transform='translate%289.1 9.1%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2819.3 19.3%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2829.6 29.6%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2839.8 39.8%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2850.0 50.0%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2860.2 60.2%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2870.4 70.4%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2880.7 80.7%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2890.9 90.9%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2890.9 9.1%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2880.7 19.3%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2870.4 29.6%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2860.2 39.8%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2850.0 50.0%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2839.8 60.2%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2829.6 70.4%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2819.3 80.7%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%289.1 90.9%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3C/g%3E%3Cg transform='translate%2850 74%29 scale%281.05%29' filter='url%28%23s%29'%3E%3Cpath d='M-7 -3 V-9 A7 7 0 0 1 7 -9 V-3' fill='none' stroke='%232f353b' stroke-width='5.5'/%3E%3Cpath d='M-7 -3 V-9 A7 7 0 0 1 7 -9 V-3' fill='none' stroke='url%28%23m%29' stroke-width='3'/%3E%3Crect x='-12' y='-4' width='24' height='18' rx='4' fill='url%28%23g%29' stroke='%236b4a10' stroke-width='1.8'/%3E%3Crect x='-9' y='-2' width='18' height='4' rx='2' fill='white' opacity='.45'/%3E%3Cpath d='M0 3 a2.6 2.6 0 1 0 .01 0 M0 5 v5' stroke='%235a3c08' stroke-width='2.4' fill='%235a3c08'/%3E%3C/g%3E%3C/svg%3E") center / 100% 100% no-repeat; }
+  .tile.unchain::before { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='m' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23f4f7f9'/%3E%3Cstop offset='.45' stop-color='%23a9b3bc'/%3E%3Cstop offset='1' stop-color='%235d6873'/%3E%3C/linearGradient%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23ffe48a'/%3E%3Cstop offset='.5' stop-color='%23f0b429'/%3E%3Cstop offset='1' stop-color='%23b27a0c'/%3E%3C/linearGradient%3E%3Cfilter id='s' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeDropShadow dx='0' dy='1.6' stdDeviation='1.2' flood-color='%23000' flood-opacity='.45'/%3E%3C/filter%3E%3C/defs%3E%3Cg transform='translate%281.5 3%29' opacity='0.35'%3E%3Cg transform='translate%289.1 9.1%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2819.3 19.3%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2829.6 29.6%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2839.8 39.8%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2850.0 50.0%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2860.2 60.2%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2870.4 70.4%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2880.7 80.7%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2890.9 90.9%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2890.9 9.1%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2880.7 19.3%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2870.4 29.6%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2860.2 39.8%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2850.0 50.0%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2839.8 60.2%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2829.6 70.4%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2819.3 80.7%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%289.1 90.9%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%23000' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3C/g%3E%3Cg filter='url%28%23s%29'%3E%3Cg transform='translate%289.1 9.1%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2819.3 19.3%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2829.6 29.6%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2839.8 39.8%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2850.0 50.0%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2860.2 60.2%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2870.4 70.4%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2880.7 80.7%29 rotate%2845%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2890.9 90.9%29 rotate%2845%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2890.9 9.1%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2880.7 19.3%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2870.4 29.6%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2860.2 39.8%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2850.0 50.0%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2839.8 60.2%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%2829.6 70.4%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3Cg transform='translate%2819.3 80.7%29 rotate%28135%29'%3E%3Crect x='-6.97' y='-2.5' width='13.94' height='5.0' rx='2.5' fill='%232f353b'/%3E%3Crect x='-6.47' y='-0.8500000000000001' width='12.94' height='1.7000000000000002' rx='0.8500000000000001' fill='%23dfe5ea'/%3E%3C/g%3E%3Cg transform='translate%289.1 90.9%29 rotate%28135%29'%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='%232f353b' stroke-width='7.800000000000001'/%3E%3Crect x='-8.5' y='-5.0' width='17' height='10' rx='5.0' fill='none' stroke='url%28%23m%29' stroke-width='4.2'/%3E%3Cpath d='M-5.5 -4.0 H5.5' stroke='white' stroke-width='1.2' stroke-linecap='round' opacity='.9'/%3E%3C/g%3E%3C/g%3E%3Cg transform='translate%2850 74%29 scale%281.05%29' filter='url%28%23s%29'%3E%3Cpath d='M-7 -3 V-9 A7 7 0 0 1 7 -9 V-3' fill='none' stroke='%232f353b' stroke-width='5.5'/%3E%3Cpath d='M-7 -3 V-9 A7 7 0 0 1 7 -9 V-3' fill='none' stroke='url%28%23m%29' stroke-width='3'/%3E%3Crect x='-12' y='-4' width='24' height='18' rx='4' fill='url%28%23g%29' stroke='%236b4a10' stroke-width='1.8'/%3E%3Crect x='-9' y='-2' width='18' height='4' rx='2' fill='white' opacity='.45'/%3E%3Cpath d='M0 3 a2.6 2.6 0 1 0 .01 0 M0 5 v5' stroke='%235a3c08' stroke-width='2.4' fill='%235a3c08'/%3E%3C/g%3E%3C/svg%3E") center / 100% 100% no-repeat; }
+  .tile.chain::before, .tile.unchain::before { z-index: -1; inset: -4px; }
+  .tile.chain { filter: saturate(.7) brightness(.92); color: #fff !important;
+    text-shadow: 0 3px 0 #2f353b, 0 -2px 0 #2f353b, 3px 0 0 #2f353b, -3px 0 0 #2f353b;
+    box-shadow: inset 0 0 0 2px rgba(255,255,255,.5), inset 0 5px 0 rgba(255,255,255,.3), inset 0 -7px 0 rgba(0,0,0,.2),
+      0 5px 0 rgba(0,0,0,.25), 0 9px 12px rgba(0,0,0,.25); transform: translateY(-4px); }
+  .tile.unchain { animation: unchain 380ms cubic-bezier(.3,1.6,.5,1) 110ms; }
+  @keyframes unchain { 40% { transform: scale(1.18); filter: brightness(1.4); } }
+  .chip.metal { background: #b9c1c8; border-radius: 40%; box-shadow: inset 0 0 0 2px #3a3f45; }
+  .tile.melted { animation: melt 400ms ease 110ms; z-index: 2; }
+  @keyframes melt { 0% { transform: scale(1); filter: brightness(1.5); } 40% { transform: scale(1.12); } 100% { transform: scale(1); filter: none; } }
+  .tile.merged { animation: pop 200ms ease 110ms; z-index: 2; }
+  @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.22); } 100% { transform: scale(1); } }
+  .controls { display: flex; gap: 8px; }
+  button { background: #8f7a66; color: #fff; border: 0; border-radius: 6px; padding: 10px 16px; font-size: 16px; font-weight: 700; cursor: pointer; }
+  button:disabled { opacity: .4; cursor: default; }
+  /* Undo + Restart share one stroke icon style. */
+  .ic { width: 1.1em; height: 1.1em; vertical-align: -0.2em; fill: none; stroke: currentColor;
+    stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  #result { position: absolute; inset: 0; background: rgba(238,228,218,.85); border-radius: 8px; display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 12px; z-index: 5; text-align: center; }
+  #result.show { display: flex; }
+  #result h2 { margin: 0; font-size: calc(var(--size) * 0.1); }
+  #stars { font-size: calc(var(--size) * 0.12); letter-spacing: 6px; }
+  #stars .off { opacity: .2; }
+  #stars span { display: inline-block; animation: starIn 320ms cubic-bezier(.3,1.6,.5,1) backwards; }
+  @keyframes starIn { from { transform: scale(0) rotate(-40deg); opacity: 0; } }
+  #menu { position: fixed; inset: 0; background: var(--bg); display: none; flex-direction: column;
+    align-items: center; justify-content: safe center; gap: 4vmin; z-index: 10; padding: 24px 16px;
+    /* The level list outgrows short screens: let it scroll (the game itself blocks touch scrolling). */
+    overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; }
+  #menu.show { display: flex; }
+  #menu h1 { font-size: calc(var(--size) * 0.12); }
+  #grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; width: var(--size); }
+  .lv { aspect-ratio: 1; border-radius: 8px; background: #8f7a66; color: #fff; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; font-size: calc(var(--size) * 0.07); font-weight: 800; padding: 0; }
+  .lv small { font-size: calc(var(--size) * 0.03); letter-spacing: 1px; color: #edc22e; min-height: 1em; }
+  .lv small .off { color: rgba(255,255,255,.3); }
+  .lv.locked { background: #cdc1b4; color: #fff; }
+  .total { font-weight: 700; }
+  .hint { font-size: 13px; opacity: .7; text-align: center; max-width: var(--size); }
+</style>
+</head>
+<body>
+<div id="menu">
+  <h1>Puzzle 2048</h1>
+  <div class="total" id="total"></div>
+  <div id="grid"></div>
+</div>
+<header>
+  <h1>Puzzle 2048</h1>
+  <div class="level" id="levelName"></div>
+</header>
+<div class="goal"><span>Make <span class="target" id="target"></span></span><span>Moves: <span id="moves">0</span></span></div>
+<div id="board">
+  <div id="railNext"></div>
+  <div id="result">
+    <h2 id="resultTitle"></h2>
+    <div id="stars"></div>
+    <div id="resultNote"></div>
+    <div class="controls"><button id="toMenu2">☰</button><button id="again"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Restart</button><button id="rewind"></button><button id="next">Next level ▶</button></div>
+  </div>
+</div>
+<div class="controls">
+  <button id="toMenu">☰ Levels</button>
+  <button id="undo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg> Undo</button>
+  <button id="restart"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Restart</button>
+</div>
+<div class="hint" id="hint"></div>
+
+<script>
+const N = 4;
+const HOLE = -1;
+const ICE = v => -v; // a tile frozen in ice; holes stay -1
+const X2 = 1; // ×2 joker: merges with any number and doubles it
+const STONE = -3; // a wall; two merges landing next to it break it
+const CHAIN = v => v + 0.25; // tile v in chains: never moves; the same value sliding in breaks them
+const canMerge = (a, b) => (a.value === b.value ? a.value !== X2 : a.value === X2 || b.value === X2);
+// Levels are verified with a BFS solver: `best` is the minimum number of moves.
+const LEVELS = [
+  {
+    name: 'Level 1',
+    target: 16,
+    best: 3,
+    hint: 'No new tiles appear. Swipe to merge what is on the board.',
+    board: [
+      [0, 4, 0, 0],
+      [2, 0, 2, 0],
+      [0, 0, 0, 0],
+      [8, 0, 0, 0],
+    ],
+  },
+  {
+    name: 'Level 2',
+    target: 32,
+    best: 4,
+    hint: 'Dark gaps are holes — tiles cannot slide through them.',
+    board: [
+      [16, 0, HOLE, 4],
+      [0, 0, HOLE, 4],
+      [0, 0, 0, 4],
+      [4, 0, 0, 0],
+    ],
+  },
+  {
+    name: 'Level 3',
+    target: 32,
+    best: 4,
+    hint: 'Plan ahead: some first moves already lose.',
+    board: [
+      [0, 4, 8, HOLE],
+      [0, 0, 0, 0],
+      [0, 0, 4, 8],
+      [HOLE, 0, 4, 4],
+    ],
+  },
+  {
+    name: 'Level 4',
+    target: 64,
+    best: 5,
+    hint: 'Bigger target, same idea. Watch the orange edge.',
+    board: [
+      [HOLE, 16, 8, 0],
+      [0, 0, 0, 0],
+      [0, 0, 16, 0],
+      [8, 0, 16, HOLE],
+    ],
+  },
+  {
+    name: 'Level 5',
+    target: 64,
+    best: 5,
+    hint: 'Lots of 8s — pair them up in the right order.',
+    board: [
+      [0, HOLE, HOLE, 8],
+      [8, 0, 0, 8],
+      [0, 0, 8, 8],
+      [0, 16, 0, 8],
+    ],
+  },
+  {
+    name: 'Level 6',
+    target: 64,
+    best: 6,
+    hint: 'Two holes split the board. Use them as walls.',
+    board: [
+      [0, 4, 8, 16],
+      [8, 8, 0, HOLE],
+      [4, 0, 0, HOLE],
+      [0, 0, 16, 0],
+    ],
+  },
+  {
+    name: 'Level 7',
+    target: 128,
+    best: 6,
+    hint: 'Big tiles, few moves. Only one first move works.',
+    board: [
+      [0, 0, HOLE, 0],
+      [0, 32, 16, 32],
+      [0, 0, 32, 16],
+      [0, 0, HOLE, 0],
+    ],
+  },
+  {
+    name: 'Level 8',
+    target: 128,
+    best: 7,
+    hint: 'Holes everywhere. Think before you swipe.',
+    board: [
+      [0, 0, HOLE, 16],
+      [0, HOLE, 16, 0],
+      [16, 0, HOLE, 16],
+      [16, 16, 0, 32],
+    ],
+  },
+  {
+    name: 'Level 9',
+    target: 128,
+    best: 7,
+    hint: 'Line up the 16s before the 32s.',
+    board: [
+      [32, 32, 16, 0],
+      [0, 0, HOLE, 0],
+      [16, HOLE, 16, 16],
+      [0, 0, 0, 0],
+    ],
+  },
+  {
+    name: 'Level 10',
+    target: 256,
+    best: 9,
+    hint: 'Build 256.',
+    board: [
+      [0, 16, 64, 0],
+      [0, 32, 64, HOLE],
+      [0, 32, 32, HOLE],
+      [0, 16, 0, 0],
+    ],
+  },
+  {
+    name: 'Level 11',
+    target: 32,
+    best: 3,
+    hint: 'Blue tiles are frozen: they cannot move. Merge right next to one to melt it.',
+    board: [
+      [0, 0, 4, 0],
+      [0, 0, 4, 8],
+      [0, 0, 0, 0],
+      [ICE(16), 0, 0, 0],
+    ],
+  },
+  {
+    name: 'Level 12',
+    target: 64,
+    best: 5,
+    hint: 'Every tile is needed, so the ice has to melt.',
+    board: [
+      [0, 8, 16, 16],
+      [0, ICE(16), 0, 0],
+      [0, 8, 0, 0],
+      [0, HOLE, 0, 0],
+    ],
+  },
+  {
+    name: 'Level 13',
+    target: 64,
+    best: 6,
+    hint: 'Two ice blocks. Which one should melt first?',
+    board: [
+      [4, 4, 0, 16],
+      [ICE(8), 0, ICE(32), 0],
+      [HOLE, 0, 0, 0],
+      [0, 0, 0, 0],
+    ],
+  },
+  {
+    name: 'Level 14',
+    target: 128,
+    best: 7,
+    hint: 'Ice is a wall until it melts. Use it.',
+    board: [
+      [ICE(16), 0, HOLE, 0],
+      [32, 0, 32, 0],
+      [16, 0, 0, 0],
+      [ICE(16), 0, 16, 0],
+    ],
+  },
+  {
+    name: 'Level 15',
+    target: 128,
+    best: 7,
+    hint: 'Final ice test.',
+    board: [
+      [0, 16, ICE(16), 0],
+      [16, 32, 0, 0],
+      [16, 0, 0, 0],
+      [HOLE, ICE(32), 0, 0],
+    ],
+  },
+  {
+    name: 'Level 16',
+    target: 32,
+    best: 2,
+    hint: 'Gold ×2 doubles any number it touches. Swipe it into a tile.',
+    board: [
+      [X2, 8, 0, 0],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+      [8, 0, 0, 8],
+    ],
+  },
+  {
+    name: 'Level 17',
+    target: 64,
+    best: 4,
+    hint: 'Save the ×2 for a big tile. Spending it early loses.',
+    board: [
+      [0, 0, 8, X2],
+      [HOLE, 0, 0, 0],
+      [8, 0, 0, 16],
+      [8, 0, 0, 8],
+    ],
+  },
+  {
+    name: 'Level 18',
+    target: 128,
+    best: 5,
+    hint: 'Build the biggest tile first, then double it.',
+    board: [
+      [0, 16, 16, 16],
+      [0, HOLE, X2, 0],
+      [16, 0, 32, 0],
+      [0, 0, 0, 0],
+    ],
+  },
+  {
+    name: 'Level 19',
+    target: 128,
+    best: 6,
+    hint: 'Ice and ×2 together. Plan for both.',
+    board: [
+      [16, X2, HOLE, 0],
+      [0, 0, 16, 0],
+      [0, 0, 16, 0],
+      [0, 32, ICE(16), 0],
+    ],
+  },
+  {
+    name: 'Level 20',
+    target: 256,
+    best: 7,
+    hint: 'Two ×2 blocks. They cannot merge with each other.',
+    board: [
+      [X2, X2, 16, 8],
+      [32, 0, 0, 0],
+      [0, 0, HOLE, 32],
+      [8, 64, 0, 32],
+    ],
+  },
+  {
+    name: 'Level 21',
+    target: 32,
+    best: 3,
+    hint: 'Stone blocks the way. Two merges next to it break it.',
+    board: [
+      [8, STONE, 0, 0],
+      [0, 0, 0, 8],
+      [0, 8, 0, 8],
+      [0, 0, 0, 0],
+    ],
+  },
+  {
+    name: 'Level 22',
+    target: 64,
+    best: 6,
+    hint: 'You cannot win around the stone. Break through it.',
+    board: [
+      [16, 0, 0, 16],
+      [0, 8, 0, 8],
+      [0, 0, 0, HOLE],
+      [0, 0, STONE, 16],
+    ],
+  },
+  {
+    name: 'Level 23',
+    target: 64,
+    best: 5,
+    hint: 'Two stones. Pick the one that opens the board.',
+    board: [
+      [16, STONE, 4, 4],
+      [STONE, 0, 0, 0],
+      [0, 32, 0, 0],
+      [0, 0, 0, 8],
+    ],
+  },
+  {
+    name: 'Level 24',
+    target: 128,
+    best: 7,
+    hint: 'Stone and ice. Every merge counts.',
+    board: [
+      [ICE(32), 0, 16, 16],
+      [0, 0, 0, 0],
+      [STONE, 0, 0, STONE],
+      [32, 16, 16, 0],
+    ],
+  },
+  {
+    name: 'Level 25',
+    target: 128,
+    best: 9,
+    hint: 'Final stone test. Long road, few merges to spare.',
+    board: [
+      [32, STONE, 16, 16],
+      [HOLE, STONE, 16, 0],
+      [0, 0, ICE(16), 16],
+      [0, 16, 0, 0],
+    ],
+  },
+  {
+    name: 'Level 26',
+    target: 32,
+    best: 4,
+    hint: 'The steel block slides one step along its rail after every swipe. The dashed box shows where it goes next.',
+    board: [
+      [0, 0, 0, 0],
+      [8, 16, 8, 0],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+    ],
+    rail: { track: [[2, 0], [2, 1], [2, 2]], idx: 2, dir: -1 },
+  },
+  {
+    name: 'Level 27',
+    target: 64,
+    best: 5,
+    hint: 'Use the steel block as a stopper to park tiles mid-board.',
+    board: [
+      [8, 0, 0, 32],
+      [0, 0, HOLE, 8],
+      [0, 0, 0, 16],
+      [0, 0, 0, 0],
+    ],
+    rail: { track: [[1, 0], [2, 0], [3, 0]], idx: 1, dir: 1 },
+  },
+  {
+    name: 'Level 28',
+    target: 64,
+    best: 7,
+    hint: 'A tile on the rail makes the block wait. Hold it where you need it.',
+    board: [
+      [32, 0, 0, 0],
+      [4, 0, 0, 0],
+      [0, 16, 0, 0],
+      [0, 8, HOLE, 4],
+    ],
+    rail: { track: [[0, 3], [1, 3], [2, 3]], idx: 1, dir: 1 },
+  },
+  {
+    name: 'Level 29',
+    target: 128,
+    best: 6,
+    hint: 'A longer rail, and ice to melt. Time your merges.',
+    board: [
+      [0, 32, 0, 0],
+      [32, 0, 0, 0],
+      [32, ICE(16), 0, 0],
+      [0, 0, 0, 16],
+    ],
+    rail: { track: [[0, 2], [1, 2], [2, 2], [3, 2]], idx: 1, dir: 1 },
+  },
+  {
+    name: 'Level 30',
+    target: 128,
+    best: 8,
+    hint: 'Final rail test: a stone, a hole and the moving block.',
+    board: [
+      [0, HOLE, 64, 16],
+      [0, 8, 32, 0],
+      [0, 0, 0, 8],
+      [0, STONE, 0, 0],
+    ],
+    rail: { track: [[0, 0], [1, 0], [2, 0], [3, 0]], idx: 0, dir: -1 },
+  },
+  {
+    name: 'Level 31',
+    target: 64,
+    best: 7,
+    hint: 'Brown cells are mud. A tile that slides in gets stuck there for that swipe.',
+    board: [
+      [0, 0, 0, 0],
+      [0, 16, 0, 8],
+      [0, 0, 32, 0],
+      [0, 8, 0, 0],
+    ],
+    mud: ['.MM.', '....', '....', '....'],
+  },
+  {
+    name: 'Level 32',
+    target: 64,
+    best: 6,
+    hint: 'Park a tile in the mud so the next one has something to hit.',
+    board: [
+      [0, 0, 0, 16],
+      [0, 0, 0, 4],
+      [8, 4, 0, 32],
+      [0, 0, 0, 0],
+    ],
+    mud: ['..M.', '....', '....', '....'],
+  },
+  {
+    name: 'Level 33',
+    target: 128,
+    best: 6,
+    hint: 'Two mud pits on the bottom row. Plan which tile lands where.',
+    board: [
+      [32, 8, 0, 8],
+      [0, 0, 0, 0],
+      [0, 0, 64, 0],
+      [0, 16, 0, 0],
+    ],
+    mud: ['....', '....', '....', 'M.M.'],
+  },
+  {
+    name: 'Level 34',
+    target: 128,
+    best: 7,
+    hint: 'Mud and ice. A stuck tile cannot merge, so it cannot melt anything either.',
+    board: [
+      [32, 32, 0, 0],
+      [0, 0, 16, 16],
+      [0, 16, 0, 0],
+      [ICE(16), 0, 0, 0],
+    ],
+    mud: ['..MM', '....', '....', '....'],
+  },
+  {
+    name: 'Level 35',
+    target: 128,
+    best: 7,
+    hint: 'Final mud test: a ×2, a stone and two mud pits.',
+    board: [
+      [0, 0, 0, X2],
+      [32, 8, 0, 8],
+      [STONE, 16, 0, 16],
+      [16, 0, 0, 0],
+    ],
+    mud: ['.M..', '..M.', '....', '....'],
+  },
+  {
+    name: 'Level 36',
+    target: 64,
+    best: 6,
+    hint: 'A chained tile cannot move. Slide the same number into it to break the chains.',
+    board: [
+      [0, 0, 0, 0],
+      [16, CHAIN(16), 16, HOLE],
+      [0, 0, 0, CHAIN(16)],
+      [0, 0, 0, 0],
+    ],
+  },
+  {
+    name: 'Level 37',
+    target: 64,
+    best: 5,
+    hint: 'Two chained 8s. Each one needs its own 8.',
+    board: [
+      [CHAIN(8), 8, 0, 8],
+      [0, 0, CHAIN(8), 0],
+      [0, 0, 0, HOLE],
+      [0, 32, 0, 0],
+    ],
+  },
+  {
+    name: 'Level 38',
+    target: 128,
+    best: 6,
+    hint: 'A chained tile is a wall too. Use it before you break it.',
+    board: [
+      [0, CHAIN(16), 64, 0],
+      [0, 16, 0, 0],
+      [0, 0, 0, 16],
+      [0, 0, 0, CHAIN(16)],
+    ],
+  },
+  {
+    name: 'Level 39',
+    target: 128,
+    best: 8,
+    hint: 'Chains and ice. Break one, melt the other.',
+    board: [
+      [32, CHAIN(32), 0, 16],
+      [0, 0, 0, 0],
+      [ICE(16), 0, 0, 0],
+      [0, 16, 0, CHAIN(16)],
+    ],
+  },
+  {
+    name: 'Level 40',
+    target: 128,
+    best: 9,
+    hint: 'Final chain test: two chains, a stone and a ×2.',
+    board: [
+      [0, 0, 0, 8],
+      [8, CHAIN(16), HOLE, 0],
+      [STONE, 0, 16, X2],
+      [CHAIN(16), 0, 0, 32],
+    ],
+  },
+];
+const COLORS = {
+  2: ['#eee4da', '#776e65'], 4: ['#ede0c8', '#776e65'], 8: ['#f2b179', '#fff'], 16: ['#f59563', '#fff'],
+  32: ['#f67c5f', '#fff'], 64: ['#f65e3b', '#fff'], 128: ['#edcf72', '#fff'], 256: ['#edcc61', '#fff'],
+  512: ['#edc850', '#fff'], 1024: ['#edc53f', '#fff'], 2048: ['#edc22e', '#fff'],
+};
+
+// ---- Sound ------------------------------------------------------------
+// Every sound is synthesized with Web Audio, so the game stays one file.
+let actx = null;
+function audio() {
+  if (!actx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    actx = new AC();
+  }
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+// One enveloped note; `at` is seconds from now, `bend` multiplies the pitch by the end.
+function tone(freq, { at = 0, dur = 0.15, type = 'sine', vol = 0.2, bend = 0 } = {}) {
+  const ctx = audio();
+  if (!ctx) return;
+  const t = ctx.currentTime + at;
+  const osc = ctx.createOscillator(), gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t);
+  if (bend) osc.frequency.exponentialRampToValueAtTime(freq * bend, t + dur);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(t); osc.stop(t + dur + 0.02);
+}
+// Band-passed noise burst: the soft "whoosh" of tiles sliding.
+function whoosh(vol = 0.07, from = 900, to = 2600) {
+  const ctx = audio();
+  if (!ctx) return;
+  const len = Math.floor(ctx.sampleRate * 0.09);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = ctx.createBufferSource(), filter = ctx.createBiquadFilter(), gain = ctx.createGain();
+  src.buffer = buf;
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(from, ctx.currentTime);
+  filter.frequency.exponentialRampToValueAtTime(to, ctx.currentTime + 0.09);
+  gain.gain.value = vol;
+  src.connect(filter).connect(gain).connect(ctx.destination);
+  src.start();
+}
+// Merge pitch climbs a pentatonic scale with the tile value (4 = C5), so
+// several merges in one move always sound like a pleasant chord.
+const PENTA = [0, 2, 4, 7, 9];
+function noteFor(value) {
+  const step = Math.log2(value) - 2;
+  return 523.25 * 2 ** ((PENTA[step % 5] + 12 * Math.floor(step / 5)) / 12);
+}
+const sfx = {
+  slide: () => whoosh(),
+  // Fires when the sliding tiles land (110ms), lowest merge first.
+  merge: values => values.sort((a, b) => a - b).forEach((v, i) => {
+    tone(noteFor(v), { at: 0.1 + i * 0.05, dur: 0.22, type: 'triangle', vol: 0.22 });
+    tone(noteFor(v) * 2, { at: 0.1 + i * 0.05, dur: 0.12, vol: 0.05 });
+  }),
+  bump: () => tone(120, { dur: 0.09, type: 'square', vol: 0.04, bend: 0.6 }),
+  undo: () => tone(700, { dur: 0.13, type: 'triangle', vol: 0.12, bend: 0.55 }),
+  unchain: () => { [1568, 2349, 1175].forEach((f, i) => tone(f, { at: 0.11 + i * 0.035, dur: 0.09, type: 'square', vol: 0.035, bend: 0.8 })); setTimeout(() => whoosh(0.06, 3000, 1200), 120); },
+  mud: () => { setTimeout(() => whoosh(0.1, 500, 160), 90); tone(140, { at: 0.1, dur: 0.14, type: 'sine', vol: 0.12, bend: 0.5 }); },
+  rail: () => { setTimeout(() => whoosh(0.06, 250, 700), 120); tone(82, { at: 0.12, dur: 0.18, type: 'triangle', vol: 0.1, bend: 0.9 }); },
+  crack: () => { tone(170, { at: 0.11, dur: 0.09, type: 'square', vol: 0.05, bend: 0.6 }); tone(95, { at: 0.11, dur: 0.12, type: 'triangle', vol: 0.12, bend: 0.7 }); },
+  shatter: () => { setTimeout(() => whoosh(0.16, 2200, 500), 110); [130, 98, 73].forEach((f, i) => tone(f, { at: 0.11 + i * 0.04, dur: 0.16, type: 'triangle', vol: 0.14, bend: 0.6 })); },
+  joker: () => [1318.5, 1568, 2093, 2637].forEach((f, i) => tone(f, { at: 0.12 + i * 0.05, dur: 0.25, vol: 0.08 })),
+  melt: () => { tone(1760, { at: 0.12, dur: 0.12, vol: 0.07, bend: 1.4 }); tone(2637, { at: 0.18, dur: 0.18, vol: 0.06, bend: 1.2 }); },
+  warn: () => { tone(196, { dur: 0.35, type: 'sawtooth', vol: 0.04, bend: 0.85 }); tone(207.65, { dur: 0.35, type: 'sawtooth', vol: 0.04, bend: 0.85 }); },
+  win: () => [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, { at: i * 0.08, dur: 0.3, type: 'triangle', vol: 0.18 })),
+  star: i => { tone([1046.5, 1318.5, 1568][i], { dur: 0.4, vol: 0.16 }); tone([1046.5, 1318.5, 1568][i] * 2, { dur: 0.25, vol: 0.04 }); },
+  stuck: () => [392, 329.63, 261.63].forEach((f, i) => tone(f, { at: i * 0.14, dur: 0.3, type: 'triangle', vol: 0.15, bend: 0.97 })),
+  click: () => tone(1200, { dur: 0.035, vol: 0.06 }),
+};
+
+// ---- Haptics -----------------------------------------------------------
+// Light vibration paired with the sounds (Android; iPhone browsers ignore it).
+// Patterns are ms on/off; most wait 110ms so the buzz lands with the tiles.
+function buzz(pattern, delay = 0) {
+  if (!navigator.vibrate) return;
+  setTimeout(() => { try { navigator.vibrate(pattern); } catch (e) {} }, delay);
+}
+const HAPTICS = {
+  unchain: () => buzz([25, 30, 25], 110),
+  merge: values => buzz(Math.min(10 + 4 * Math.max(...values.map(v => Math.log2(v))), 45), 110),
+  joker: () => buzz([15, 40, 25], 110),
+  melt: () => buzz(20, 140),
+  crack: () => buzz(30, 110),
+  shatter: () => buzz([40, 30, 70], 110),
+  bump: () => buzz(8),
+  warn: () => buzz([40, 60, 40]),
+  win: () => buzz([30, 70, 30, 70, 90]),
+  stuck: () => buzz(120),
+};
+for (const [name, haptic] of Object.entries(HAPTICS)) {
+  const play = sfx[name];
+  sfx[name] = (...args) => { play(...args); haptic(...args); };
+}
+
+const boardEl = document.getElementById('board');
+const result = document.getElementById('result');
+let level, grid, moves, history, nextId, finished;
+
+function pos(r, c) {
+  const step = `((var(--size) - var(--gap) * 5) / 4 + var(--gap))`;
+  return { left: `calc(var(--gap) + ${c} * ${step})`, top: `calc(var(--gap) + ${r} * ${step})` };
+}
+
+function load(index) {
+  level = LEVELS[index];
+  boardEl.querySelectorAll('.cell, .tile').forEach(el => el.remove());
+  nextId = 1; moves = 0; history = []; finished = false;
+  grid = level.board.map(row => row.map(v => (v > 0 && v % 1 ? { id: nextId++, value: Math.floor(v), chain: true }
+    : v > 0 ? { id: nextId++, value: v }
+    : v === STONE ? { id: nextId++, stone: 2 } : v < HOLE ? { id: nextId++, value: -v, ice: true } : v)));
+  if (level.rail) {
+    const [r, c] = level.rail.track[level.rail.idx];
+    grid[r][c] = { id: nextId++, rail: true, idx: level.rail.idx, dir: level.rail.dir };
+  }
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const cell = document.createElement('div');
+    cell.className = 'cell' + (grid[r][c] === HOLE ? ' hole' : '');
+    if (level.mud && level.mud[r][c] === 'M') cell.classList.add('mud');
+    if (level.rail && level.rail.track.some(([tr, tc]) => tr === r && tc === c)) {
+      const [[r0], [r1]] = level.rail.track;
+      cell.classList.add('track', r0 === r1 ? 'h' : 'v');
+    }
+    Object.assign(cell.style, pos(r, c));
+    boardEl.prepend(cell);
+  }
+  document.getElementById('levelName').textContent = level.name;
+  document.getElementById('target').textContent = level.target;
+  document.getElementById('hint').textContent = level.hint;
+  result.classList.remove('show');
+  setWinnable(true);
+  render();
+}
+
+function lineCoords(i, dir) {
+  const coords = [];
+  for (let j = 0; j < N; j++) {
+    if (dir === 'left') coords.push([i, j]);
+    if (dir === 'right') coords.push([i, N - 1 - j]);
+    if (dir === 'up') coords.push([j, i]);
+    if (dir === 'down') coords.push([N - 1 - j, i]);
+  }
+  return coords;
+}
+
+// After a swipe the rail wall steps one cell along its track, bouncing at the
+// ends. Anything in the way makes it wait a turn.
+function railNextStep(w) {
+  const len = level.rail.track.length;
+  const dir = w.idx + w.dir < 0 || w.idx + w.dir >= len ? -w.dir : w.dir;
+  return { dir, idx: w.idx + dir };
+}
+function advanceRail(g) {
+  let r = -1, c = -1;
+  g.forEach((row, rr) => row.forEach((t, cc) => { if (t && t.rail) { r = rr; c = cc; } }));
+  const w = g[r][c], { dir, idx } = railNextStep(w);
+  const [nr, nc] = level.rail.track[idx];
+  if (!g[nr][nc]) { g[nr][nc] = { ...w, idx, dir, slid: true }; g[r][c] = 0; } else g[r][c] = { ...w, dir };
+}
+
+// Slides tiles within each segment between holes/ice; a tile merges at most once per move.
+// Ice next to a cell where a merge landed melts into a normal tile.
+// Mud floor per level: 4 strings with 'M' for mud.
+const isMud = ([r, c]) => !!(level.mud && level.mud[r][c] === 'M');
+const isWall = t => t === HOLE || (t && (t.ice || t.stone || t.rail));
+function slide(g, dir) {
+  const next = g.map(row => row.map(v => (isWall(v) ? (v === HOLE ? HOLE : { ...v }) : 0)));
+  const absorbed = [], mergedAt = [], broken = [];
+  let moved = false;
+  for (let i = 0; i < N; i++) {
+    let seg = [];
+    // Tiles move front-first (seg[0] is nearest the wall they slide toward).
+    // A tile that slides into mud stops there and cannot merge this turn.
+    const flush = () => {
+      const out = seg.map(() => null), done = seg.map(() => false);
+      seg.forEach(([r, c], i) => {
+        const t = g[r][c];
+        if (!t || t === HOLE) return;
+        if (t.chain) { out[i] = { ...t }; return; } // chained: stays put at the segment front
+        let p = i, stuck = false;
+        while (p > 0 && !out[p - 1]) { p--; if (isMud(seg[p])) { stuck = true; break; } }
+        const front = p > 0 ? out[p - 1] : null;
+        if (!stuck && front && !done[p - 1] && canMerge(front, t)) {
+          // The number tile survives; a joker is always the one absorbed.
+          const [keep, gone] = front.value === X2 ? [t, front] : [front, t];
+          out[p - 1] = { id: keep.id, value: keep.value * 2, merged: true, doubled: gone.value === X2 && keep.value !== X2, unchained: !!front.chain };
+          done[p - 1] = true;
+          absorbed.push({ id: gone.id, at: seg[p - 1] });
+          mergedAt.push(seg[p - 1]);
+        } else out[p] = { id: t.id, value: t.value, mudded: stuck };
+      });
+      seg.forEach(([r, c], k) => {
+        next[r][c] = out[k] || 0;
+        const before = g[r][c];
+        if ((before && before.id) !== (out[k] && out[k].id) || (out[k] && out[k].merged)) moved = true;
+      });
+      seg = [];
+    };
+    for (const [r, c] of lineCoords(i, dir)) {
+      // A chained tile starts a new segment: tiles behind it stop against it or merge into it.
+      if (g[r][c] && g[r][c].chain) { flush(); seg.push([r, c]); } else if (isWall(g[r][c])) flush(); else seg.push([r, c]);
+    }
+    flush();
+  }
+  for (const [r, c] of mergedAt) for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const t = next[r + dr] && next[r + dr][c + dc];
+    if (t && t.ice) next[r + dr][c + dc] = { id: t.id, value: t.value, melted: true };
+    else if (t && t.stone === 2) next[r + dr][c + dc] = { id: t.id, stone: 1, hit: true };
+    else if (t && t.stone === 1) { next[r + dr][c + dc] = 0; broken.push({ id: t.id }); }
+  }
+  if (moved && level.rail) advanceRail(next);
+  return { next, absorbed, moved, broken };
+}
+
+function move(dir) {
+  if (finished || document.getElementById('menu').classList.contains('show')) return;
+  const { next, absorbed, moved, broken } = slide(grid, dir);
+  if (!moved) { sfx.bump(); return; }
+  const merges = next.flat().filter(t => t && t.merged).map(t => t.value);
+  sfx.slide();
+  if (merges.length) sfx.merge(merges);
+  if (next.flat().some(t => t && t.melted)) sfx.melt();
+  if (next.flat().some(t => t && t.doubled)) sfx.joker();
+  if (next.flat().some(t => t && t.mudded)) sfx.mud();
+  if (next.flat().some(t => t && t.slid)) sfx.rail();
+  if (broken.length) sfx.shatter(); else if (next.flat().some(t => t && t.hit)) sfx.crack();
+  broken.forEach(({ id }) => {
+    const el = boardEl.querySelector(`.tile[data-id="${id}"]`);
+    if (!el) return;
+    el.classList.add('shatter');
+    burst(el.style.left, el.style.top, '');
+    setTimeout(() => el.remove(), 650);
+  });
+  next.forEach((row, r) => row.forEach((t, c) => { if (t && t.unchained) { const p = pos(r, c); burst(p.left, p.top, 'metal'); } }));
+  if (next.flat().some(t => t && t.unchained)) sfx.unchain();
+  history.push({ grid: grid.map(row => row.map(t => (t && t !== HOLE ? { ...t } : t))), winnable });
+  absorbed.forEach(({ id, at }) => {
+    const el = boardEl.querySelector(`.tile[data-id="${id}"]`);
+    if (el) { Object.assign(el.style, pos(at[0], at[1])); setTimeout(() => el.remove(), 110); }
+  });
+  grid = next;
+  moves++;
+  render();
+  checkEnd();
+}
+
+function undo() {
+  if (!history.length || finished) return;
+  grid = history.pop().grid;
+  moves--;
+  sfx.undo();
+  boardEl.querySelectorAll('.tile').forEach(el => el.remove());
+  setWinnable(canWin(grid));
+  render();
+}
+
+// Jump back to the most recent board that could still reach the target.
+function rewind() {
+  sfx.undo();
+  while (history.length && !winnable) {
+    const snap = history.pop();
+    grid = snap.grid; moves--;
+    winnable = snap.winnable;
+  }
+  boardEl.querySelectorAll('.tile').forEach(el => el.remove());
+  setWinnable(winnable);
+  render();
+}
+
+// How many undos it takes to get back to a board that can still be won.
+function stepsToWinnable() {
+  let k = 0;
+  for (let i = history.length - 1; i >= 0; i--) { k++; if (history[i].winnable) break; }
+  return k;
+}
+const undoLabel = n => `undo ${n} move${n > 1 ? 's' : ''}`;
+
+// Soft warning, no popup: orange board edge, a pulsing Undo button and a hint
+// that says how far back the last winnable board is.
+let winnable = true;
+function setWinnable(ok) {
+  winnable = ok;
+  boardEl.classList.toggle('lost', !ok);
+  document.getElementById('undo').classList.toggle('urge', !ok);
+  const hint = document.getElementById('hint');
+  hint.classList.toggle('warn', !ok);
+  hint.textContent = ok ? level.hint : `No way to win from here · ${undoLabel(stepsToWinnable())}`;
+}
+
+function render() {
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const t = grid[r][c];
+    if (!t || t === HOLE) continue;
+    let el = boardEl.querySelector(`.tile[data-id="${t.id}"]`);
+    if (!el) { el = document.createElement('div'); el.dataset.id = t.id; boardEl.insertBefore(el, result); }
+    const [bg, fg] = t.value === X2 || t.stone || t.rail ? ['', ''] : COLORS[t.value] || ['#3c3a32', '#fff'];
+    el.className = 'tile' + (t.merged ? ' merged' : '') + (t.ice ? ' ice' : '') + (t.melted ? ' melted' : '')
+      + (t.value === X2 ? ' joker' : '') + (t.stone ? ' stone' : '') + (t.stone === 1 ? ' cracked' : '') + (t.hit ? ' hit' : '')
+      + (t.rail ? ' rail' : '') + (t.slid ? ' slid' : '') + (isMud([r, c]) ? ' inmud' : '') + (t.mudded ? ' splash' : '')
+      + (t.chain ? ' chain' : '') + (t.unchained ? ' unchain' : '');
+    el.textContent = t.stone || t.rail ? '' : t.value === X2 ? '×2' : t.value;
+    el.style.background = bg; el.style.color = fg;
+    Object.assign(el.style, pos(r, c));
+    delete t.merged; delete t.melted; delete t.doubled; delete t.hit; delete t.slid; delete t.mudded; delete t.unchained;
+  }
+  // Dashed ghost on the cell the rail wall will try to enter next swipe.
+  const ghost = document.getElementById('railNext');
+  ghost.classList.toggle('show', !!level.rail);
+  if (level.rail) {
+    const w = grid.flat().find(t => t && t.rail);
+    const [nr, nc] = level.rail.track[railNextStep(w).idx];
+    Object.assign(ghost.style, pos(nr, nc));
+  }
+  document.getElementById('moves').textContent = moves;
+  document.getElementById('undo').disabled = !history.length;
+}
+
+// A burst of chips (rock or chain links) flying out of one cell.
+function burst(left, top, kind) {
+  const debris = document.createElement('div');
+  debris.className = 'debris';
+  debris.style.left = left; debris.style.top = top;
+  for (let i = 0; i < 8; i++) {
+    const chip = document.createElement('div');
+    const a = (i / 8) * Math.PI * 2 + Math.random() * 0.5, d = 40 + Math.random() * 35;
+    chip.className = 'chip' + (kind ? ' ' + kind : '');
+    chip.style.setProperty('--dx', `${Math.cos(a) * d}px`);
+    chip.style.setProperty('--dy', `${Math.sin(a) * d}px`);
+    chip.style.setProperty('--rot', `${Math.random() * 360}deg`);
+    debris.appendChild(chip);
+  }
+  boardEl.appendChild(debris);
+  setTimeout(() => debris.remove(), 650);
+}
+
+function tiles() { return grid.flat().filter(t => t && t !== HOLE); }
+
+function checkEnd() {
+  if (tiles().some(t => !t.ice && t.value >= level.target)) {
+    const stars = moves <= level.best ? 3 : moves <= level.best + 2 ? 2 : 1;
+    saveStars(LEVELS.indexOf(level), stars);
+    showResult('Level clear!', stars, `${moves} moves · best is ${level.best}`);
+    return;
+  }
+  const wasWinnable = winnable;
+  setWinnable(canWin(grid));
+  const canMove = ['left', 'right', 'up', 'down'].some(d => slide(grid, d).moved);
+  if (!canMove) showResult('Stuck!', 0, 'Undo or restart to try again');
+  else if (wasWinnable && !winnable) setTimeout(sfx.warn, 200);
+}
+
+// Breadth-first search over every reachable board. With no new tiles the
+// state space is tiny, so this runs after every move.
+function canWin(start) {
+  const key = g => g.map(row => row.map(t => (t === HOLE ? '#' : !t ? 0 : t.stone ? 's' + t.stone : t.rail ? 'r' + t.idx + t.dir : t.chain ? 'c' + t.value : (t.ice ? 'i' : '') + t.value)).join(',')).join('/');
+  const seen = new Set([key(start)]);
+  const queue = [start];
+  while (queue.length) {
+    const g = queue.shift();
+    if (g.flat().some(t => t && t !== HOLE && !t.ice && t.value >= level.target)) return true;
+    for (const d of ['left', 'right', 'up', 'down']) {
+      const { next, moved } = slide(g, d);
+      if (!moved) continue;
+      const k = key(next);
+      if (!seen.has(k)) { seen.add(k); queue.push(next); }
+    }
+  }
+  return false;
+}
+
+function showResult(title, stars, note) {
+  finished = true;
+  setTimeout(() => {
+    document.getElementById('resultTitle').textContent = title;
+    // Stars pop in one by one, each with its own chime.
+    document.getElementById('stars').innerHTML = stars
+      ? [1, 2, 3].map(i => `<span class="${i <= stars ? '' : 'off'}" style="animation-delay:${350 + i * 220}ms">★</span>`).join('') : '';
+    if (stars) {
+      sfx.win();
+      for (let i = 0; i < stars; i++) setTimeout(() => sfx.star(i), 350 + (i + 1) * 220);
+    } else sfx.stuck();
+    document.getElementById('resultNote').textContent = note;
+    document.getElementById('next').style.display = stars && LEVELS.indexOf(level) < LEVELS.length - 1 ? '' : 'none';
+    // Stuck: offer one tap back to the last board that can still be won.
+    const back = document.getElementById('rewind');
+    back.style.display = stars ? 'none' : '';
+    back.innerHTML = `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg> ${undoLabel(stepsToWinnable()).replace('u', 'U')}`;
+    result.classList.add('show');
+  }, 350);
+}
+
+document.getElementById('undo').onclick = undo;
+document.getElementById('rewind').onclick = () => { result.classList.remove('show'); finished = false; rewind(); };
+document.getElementById('next').onclick = () => load(LEVELS.indexOf(level) + 1);
+
+// ---- Progress + level select ----------------------------------------
+// Best stars per level, kept in this browser. Level n+1 unlocks once n is cleared.
+let progress = [];
+try { progress = JSON.parse(localStorage.getItem('puzzle2048-stars')) || []; } catch (e) {}
+function saveStars(i, stars) {
+  progress[i] = Math.max(progress[i] || 0, stars);
+  try { localStorage.setItem('puzzle2048-stars', JSON.stringify(progress)); } catch (e) {}
+}
+const unlocked = i => i === 0 || (progress[i - 1] || 0) > 0;
+
+function showMenu() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  LEVELS.forEach((l, i) => {
+    const b = document.createElement('button');
+    const open = unlocked(i);
+    b.className = 'lv' + (open ? '' : ' locked');
+    const st = progress[i] || 0;
+    b.innerHTML = open
+      ? `${i + 1}<small>${st ? [1, 2, 3].map(k => `<span class="${k <= st ? '' : 'off'}">★</span>`).join('') : ''}</small>`
+      : '🔒';
+    b.disabled = !open;
+    b.onclick = () => { document.getElementById('menu').classList.remove('show'); load(i); };
+    grid.appendChild(b);
+  });
+  const earned = progress.reduce((a, b) => a + (b || 0), 0);
+  document.getElementById('total').textContent = `★ ${earned} / ${LEVELS.length * 3}`;
+  document.getElementById('menu').classList.add('show');
+}
+document.getElementById('toMenu').onclick = showMenu;
+document.getElementById('toMenu2').onclick = showMenu;
+// Every button ticks; the capture phase runs before the button's own handler.
+document.addEventListener('click', e => { if (e.target.closest('button')) sfx.click(); }, true);
+document.getElementById('restart').onclick = () => load(LEVELS.indexOf(level));
+document.getElementById('again').onclick = () => load(LEVELS.indexOf(level));
+
+const KEYS = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', a: 'left', d: 'right', w: 'up', s: 'down' };
+document.addEventListener('keydown', e => {
+  if (KEYS[e.key]) { e.preventDefault(); move(KEYS[e.key]); }
+  if (e.key === 'z' || e.key === 'Backspace') undo();
+});
+let sx = 0, sy = 0;
+document.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+document.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 30) return;
+  move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+});
+
+// Zoom/resize changes --size; snap tiles instead of letting them slide to the new spots.
+let resizeTimer;
+window.addEventListener('resize', () => {
+  boardEl.classList.add('resizing');
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => boardEl.classList.remove('resizing'), 150);
+});
+
+load(0);
+showMenu();
+</script>
+</body>
+</html>
