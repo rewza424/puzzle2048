@@ -2,18 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Puzzle 2048 Demo</title>
 <style>
   :root {
     --bg: #faf8ef; --board: #bbada0; --cell: #cdc1b4; --text: #776e65;
     /* Board size also fits the window height: header, goal bar, buttons and hint need ~150px + 15% of it. */
     --size: min(88vw, 460px, calc((100vh - 150px) / 1.15)); --gap: calc(var(--size) * 0.03);
+    /* Phones: 100dvh is the height actually visible between the browser bars (100vh can hide the
+       buttons under them), minus the notch and home-bar areas. */
+    --safe-v: calc(env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px));
+  }
+  @supports (height: 100dvh) {
+    :root { --size: min(88vw, 460px, calc((100dvh - 150px - var(--safe-v)) / 1.15)); }
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
     font-family: system-ui, -apple-system, sans-serif; overscroll-behavior: none; touch-action: none; }
-  body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2vmin; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2vmin;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+    /* Feel like an app: no blue tap flash, no text selection or callout menu on a long press. */
+    -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   header { width: var(--size); display: flex; align-items: flex-end; justify-content: space-between; }
   h1 { margin: 0; font-size: calc(var(--size) * 0.09); }
   .level { font-size: 14px; font-weight: 700; opacity: .7; }
@@ -157,6 +166,11 @@
     border-radius: 12px; box-shadow: 0 4px 0 #6f5d4d; font-size: 26px; }
   .controls.bar .ic { width: 1em; height: 1em; vertical-align: 0; stroke-width: 2.4; }
   .controls.bar #hintBtn { background: #edc22e; box-shadow: 0 4px 0 #c9a21b; }
+  /* Pressed: the 3D button sinks onto its shadow. */
+  .controls.bar button { transition: transform 60ms ease, box-shadow 60ms ease; }
+  .controls.bar button:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 #6f5d4d; }
+  .controls.bar #hintBtn:active { box-shadow: 0 1px 0 #c9a21b; }
+  .lv:active:not(:disabled), #result button:active { transform: scale(.94); }
   /* Undo + Restart share one stroke icon style. */
   .ic { width: 1.1em; height: 1.1em; vertical-align: -0.2em; fill: none; stroke: currentColor;
     stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
@@ -169,7 +183,8 @@
   #stars span { display: inline-block; animation: starIn 320ms cubic-bezier(.3,1.6,.5,1) backwards; }
   @keyframes starIn { from { transform: scale(0) rotate(-40deg); opacity: 0; } }
   #menu { position: fixed; inset: 0; background: var(--bg); display: none; flex-direction: column;
-    align-items: center; justify-content: safe center; gap: 4vmin; z-index: 10; padding: 24px 16px;
+    align-items: center; justify-content: safe center; gap: 4vmin; z-index: 10;
+    padding: calc(24px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
     /* The level list outgrows short screens: let it scroll (the game itself blocks touch scrolling). */
     overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; }
   #menu.show { display: flex; }
