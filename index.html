@@ -64,7 +64,10 @@
   .hint.warn { color: #d9711c; font-weight: 700; opacity: 1; animation: fadein 400ms ease; }
   @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
   .tile { display: flex; align-items: center; justify-content: center; font-weight: 800;
-    font-size: calc(var(--size) * 0.09); transition: left 110ms ease-in-out, top 110ms ease-in-out; }
+    font-size: calc(var(--size) * 0.09); left: 0; top: 0; transition: translate 110ms ease-in-out; }
+  /* Tiles slide with `translate` (moved by the GPU, separate from the `transform` the pop/melt/
+     shake effects use). Very old browsers without it fall back to left/top. */
+  @supports not (translate: 1px 1px) { .tile { transition: left 110ms ease-in-out, top 110ms ease-in-out; } }
   #board.resizing .tile { transition: none; }
   /* Ice block, mobile-game style. ::after = ice body (texture, depth, bevel)
      under the number; ::before = cracks, gloss and a glint that sweeps across
@@ -1081,7 +1084,15 @@ function pos(r, c) {
   return { left: `calc(var(--gap) + ${c} * ${step})`, top: `calc(var(--gap) + ${r} * ${step})` };
 }
 
+const GPU_SLIDE = CSS.supports('translate', '1px 1px');
+function placeTile(el, r, c) {
+  const p = pos(r, c);
+  if (GPU_SLIDE) el.style.translate = `${p.left} ${p.top}`; else Object.assign(el.style, p);
+  el.dataset.at = r + ',' + c;
+}
+
 function load(index) {
+  clearQueue();
   level = LEVELS[index];
   tutor = index < 2 ? 'swipe' : index === 10 ? 'ice' : null;
   boardEl.querySelectorAll('.cell, .tile').forEach(el => el.remove());
@@ -1234,10 +1245,31 @@ function slide(g, dir) {
   return { next, absorbed, moved, broken };
 }
 
+// Swipes made while tiles are still sliding wait their turn (up to 4), so every move animates in full.
+const SLIDE_MS = 115;
+let busyUntil = 0, queue = [], queueTimer = null;
+function clearQueue() { queue = []; clearTimeout(queueTimer); queueTimer = null; busyUntil = 0; }
 function move(dir) {
   if (finished || document.getElementById('menu').classList.contains('show')) return;
+  if (performance.now() < busyUntil || queue.length) {
+    if (queue.length < 4) queue.push(dir);
+    if (!queueTimer) queueTimer = setTimeout(runQueue, Math.max(0, busyUntil - performance.now()));
+    return;
+  }
+  step(dir);
+}
+function runQueue() {
+  queueTimer = null;
+  const d = queue.shift();
+  if (d) step(d);
+  if (queue.length) queueTimer = setTimeout(runQueue, Math.max(0, busyUntil - performance.now()));
+}
+
+function step(dir) {
+  if (finished || document.getElementById('menu').classList.contains('show')) { queue = []; return; }
   const { next, absorbed, moved, broken } = slide(grid, dir);
   if (!moved) { sfx.bump(); return; }
+  busyUntil = performance.now() + SLIDE_MS;
   const merges = next.flat().filter(t => t && t.merged).map(t => t.value);
   sfx.slide();
   if (merges.length) sfx.merge(merges);
@@ -1250,7 +1282,8 @@ function move(dir) {
     const el = boardEl.querySelector(`.tile[data-id="${id}"]`);
     if (!el) return;
     el.classList.add('shatter');
-    burst(el.style.left, el.style.top, '');
+    const [r, c] = el.dataset.at.split(',').map(Number), p = pos(r, c);
+    burst(p.left, p.top, '');
     setTimeout(() => el.remove(), 650);
   });
   next.forEach((row, r) => row.forEach((t, c) => { if (t && t.unchained) { const p = pos(r, c); burst(p.left, p.top, 'metal'); } }));
@@ -1258,7 +1291,7 @@ function move(dir) {
   history.push({ grid: grid.map(row => row.map(t => (t && t !== HOLE ? { ...t } : t))), winnable });
   absorbed.forEach(({ id, at }) => {
     const el = boardEl.querySelector(`.tile[data-id="${id}"]`);
-    if (el) { Object.assign(el.style, pos(at[0], at[1])); setTimeout(() => el.remove(), 110); }
+    if (el) { placeTile(el, at[0], at[1]); setTimeout(() => el.remove(), 110); }
   });
   grid = next;
   moves++;
@@ -1269,6 +1302,7 @@ function move(dir) {
 
 function undo() {
   if (!history.length || finished) return;
+  clearQueue();
   grid = history.pop().grid;
   moves--;
   hintDir = null;
@@ -1280,6 +1314,7 @@ function undo() {
 
 // Jump back to the most recent board that could still reach the target.
 function rewind() {
+  clearQueue();
   sfx.undo();
   while (history.length && !winnable) {
     const snap = history.pop();
@@ -1313,6 +1348,9 @@ function starCap() {
   return Math.min(hinted ? 2 : 3, moves <= level.best ? 3 : moves <= level.best + 2 ? 2 : 1);
 }
 
+// How long each effect class plays (CSS delay + duration).
+const FX_MS = { merged: 310, melted: 510, hit: 370, splash: 410, unchain: 490 };
+
 function render() {
   for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
     const t = grid[r][c];
@@ -1320,13 +1358,22 @@ function render() {
     let el = boardEl.querySelector(`.tile[data-id="${t.id}"]`);
     if (!el) { el = document.createElement('div'); el.dataset.id = t.id; boardEl.insertBefore(el, result); }
     const [bg, fg] = t.value === X2 || t.stone || t.rail ? ['', ''] : COLORS[t.value] || ['#3c3a32', '#fff'];
-    el.className = 'tile' + (t.merged ? ' merged' : '') + (t.ice ? ' ice' : '') + (t.melted ? ' melted' : '')
-      + (t.value === X2 ? ' joker' : '') + (t.stone ? ' stone' : '') + (t.stone === 1 ? ' cracked' : '') + (t.hit ? ' hit' : '')
-      + (t.rail ? ' rail' : '') + (t.slid ? ' slid' : '') + (isMud([r, c]) ? ' inmud' : '') + (t.mudded ? ' splash' : '')
-      + (t.chain ? ' chain' : '') + (t.unchained ? ' unchain' : '');
+    let cls = 'tile' + (t.ice ? ' ice' : '')
+      + (t.value === X2 ? ' joker' : '') + (t.stone ? ' stone' : '') + (t.stone === 1 ? ' cracked' : '')
+      + (t.rail ? ' rail' : '') + (t.slid ? ' slid' : '') + (isMud([r, c]) ? ' inmud' : '') + (t.chain ? ' chain' : '');
+    // Effect classes stay on for their full animation, so a quick next swipe doesn't cut them off.
+    const now = performance.now(), fx = el.fx || (el.fx = {});
+    const fired = { merged: t.merged, melted: t.melted, hit: t.hit, splash: t.mudded, unchain: t.unchained };
+    let restart = false;
+    for (const [name, on] of Object.entries(fired)) {
+      if (on) { restart = restart || fx[name] > now; fx[name] = now + FX_MS[name]; }
+      if (fx[name] > now) cls += ' ' + name;
+    }
+    if (restart) { el.className = 'tile'; void el.offsetWidth; } // same effect again: restart it
+    el.className = cls;
     el.textContent = t.stone || t.rail ? '' : t.value === X2 ? '×2' : t.value;
     el.style.background = bg; el.style.color = fg;
-    Object.assign(el.style, pos(r, c));
+    placeTile(el, r, c);
     delete t.merged; delete t.melted; delete t.doubled; delete t.hit; delete t.slid; delete t.mudded; delete t.unchained;
   }
   // Dashed ghost on the cell the rail wall will try to enter next swipe.
