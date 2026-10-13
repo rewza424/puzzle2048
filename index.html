@@ -1537,7 +1537,26 @@ function showMenu() {
 document.getElementById('toMenu').onclick = showMenu;
 document.getElementById('toMenu2').onclick = showMenu;
 // Every button ticks; the capture phase runs before the button's own handler.
-document.addEventListener('click', e => { if (e.target.closest('button')) sfx.click(); }, true);
+// Fast taps: a button fires as soon as the finger lifts, if it is still on the button or within
+// 12px of it (the pressed button sinks 3px, so edge taps used to slip off and get lost). Phones
+// also drop quick repeated taps; this doesn't wait for their click. The real click that follows
+// is swallowed, wherever it lands, so a tap can't hit what appears under the finger next.
+let tapBtn = null, fastAt = -1e9;
+document.addEventListener('pointerdown', e => { tapBtn = e.target.closest('button'); }, true);
+document.addEventListener('pointercancel', () => { tapBtn = null; }, true);
+document.addEventListener('pointerup', e => {
+  const b = tapBtn; tapBtn = null;
+  if (!b || b.disabled || (e.pointerType === 'touch' && swiped)) return;
+  const r = b.getBoundingClientRect(), pad = 12;
+  if (e.clientX < r.left - pad || e.clientX > r.right + pad || e.clientY < r.top - pad || e.clientY > r.bottom + pad) return;
+  fastAt = performance.now();
+  b.click();
+}, true);
+document.addEventListener('click', e => {
+  // detail 0 = a keyboard press, never swallowed
+  if (e.isTrusted && e.detail > 0 && performance.now() - fastAt < 600) { e.stopPropagation(); e.preventDefault(); return; }
+  if (e.target.closest('button')) sfx.click();
+}, true);
 document.getElementById('restart').onclick = () => load(LEVELS.indexOf(level));
 document.getElementById('again').onclick = () => load(LEVELS.indexOf(level));
 
