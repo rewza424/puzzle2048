@@ -171,9 +171,11 @@
   .controls.bar #hintBtn { background: #edc22e; box-shadow: 0 4px 0 #c9a21b; }
   /* Pressed: the 3D button sinks onto its shadow. */
   .controls.bar button { transition: transform 60ms ease, box-shadow 60ms ease; }
-  .controls.bar button:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 #6f5d4d; }
-  .controls.bar #hintBtn:active { box-shadow: 0 1px 0 #c9a21b; }
-  .lv:active:not(:disabled), #result button:active { transform: scale(.94); }
+  /* .pressed is held for at least 120ms (see the fast-tap code), so even a quick tap shows it;
+     it also pauses the orange pulse on Undo, which would override the press. */
+  .controls.bar button.pressed { transform: translateY(3px); box-shadow: 0 1px 0 #6f5d4d; animation: none; }
+  .controls.bar #hintBtn.pressed { box-shadow: 0 1px 0 #c9a21b; }
+  .lv.pressed, #result button.pressed { transform: scale(.94); }
   /* Undo + Restart share one stroke icon style. */
   .ic { width: 1.1em; height: 1.1em; vertical-align: -0.2em; fill: none; stroke: currentColor;
     stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
@@ -195,7 +197,7 @@
   #menu .tagline { width: var(--size); text-align: center; font-weight: 600; font-size: clamp(14px, calc(var(--size) * 0.04), 18px); margin-top: -2vmin; }
   #play { width: var(--size); font-size: clamp(20px, calc(var(--size) * 0.065), 30px); padding: .55em; border-radius: 10px;
     background: #f59563; box-shadow: 0 4px 0 #c96f40; animation: playPulse 1.8s ease-in-out infinite; }
-  #play:active { transform: translateY(3px); box-shadow: 0 1px 0 #c96f40; }
+  #play.pressed { transform: translateY(3px); box-shadow: 0 1px 0 #c96f40; animation: none; }
   @keyframes playPulse { 50% { transform: scale(1.03); } }
   /* Live star rating in the goal bar: a star dims the moment it is lost. */
   .goal .par .off { opacity: .25; }
@@ -1588,11 +1590,20 @@ document.getElementById('toMenu2').onclick = showMenu;
 // 12px of it (the pressed button sinks 3px, so edge taps used to slip off and get lost). Phones
 // also drop quick repeated taps; this doesn't wait for their click. The real click that follows
 // is swallowed, wherever it lands, so a tap can't hit what appears under the finger next.
-let tapBtn = null, fastAt = -1e9;
-document.addEventListener('pointerdown', e => { tapBtn = e.target.closest('button'); }, true);
-document.addEventListener('pointercancel', () => { tapBtn = null; }, true);
+let tapBtn = null, fastAt = -1e9, pressedAt = 0;
+function release(b) {
+  if (b) setTimeout(() => b.classList.remove('pressed'), Math.max(0, 120 - (performance.now() - pressedAt)));
+}
+document.addEventListener('pointerdown', e => {
+  tapBtn = e.target.closest('button');
+  if (tapBtn && !tapBtn.disabled) { tapBtn.classList.add('pressed'); pressedAt = performance.now(); }
+}, true);
+document.addEventListener('pointercancel', () => { release(tapBtn); tapBtn = null; }, true);
+// A swipe that started on a button lets it pop back up straight away.
+document.addEventListener('touchmove', () => { if (swiped && tapBtn) tapBtn.classList.remove('pressed'); }, { passive: true });
 document.addEventListener('pointerup', e => {
   const b = tapBtn; tapBtn = null;
+  release(b);
   if (!b || b.disabled || (e.pointerType === 'touch' && swiped)) return;
   const r = b.getBoundingClientRect(), pad = 12;
   if (e.clientX < r.left - pad || e.clientX > r.right + pad || e.clientY < r.top - pad || e.clientY > r.bottom + pad) return;
