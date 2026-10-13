@@ -19,7 +19,29 @@
   .level { font-size: 14px; font-weight: 700; opacity: .7; }
   .goal { width: var(--size); background: #8f7a66; color: #fff; border-radius: 8px; padding: 10px 14px;
     display: flex; justify-content: space-between; align-items: center; font-weight: 700; }
-  .goal .target { background: #edc22e; color: #fff; border-radius: 6px; padding: 2px 10px; margin-left: 6px; }
+  .goal { font-size: clamp(12px, calc(var(--size) * 0.038), 18px); gap: 6px; padding: 10px clamp(8px, calc(var(--size) * 0.03), 14px); }
+  .goal .target { display: inline-flex; align-items: center; justify-content: center; min-width: 2.3em; height: 2.1em;
+    margin: 0 5px; padding: 0 6px; border-radius: 6px; font-weight: 800; font-size: 1.15em; vertical-align: middle;
+    box-shadow: 0 2px 0 rgba(0,0,0,.18); }
+  .goal .par { font-size: .85em; opacity: .95; white-space: nowrap; }
+  .goal .aim { white-space: nowrap; }
+  .goal .par b { color: #edc22e; letter-spacing: 1px; }
+  .goal .par { font-size: 1.12em; }
+  /* First levels: an animated hand shows how to swipe until the first move. */
+  #swipeDemo { position: absolute; inset: 0; pointer-events: none; display: none; z-index: 5; }
+  #swipeDemo.show { display: block; }
+  #board.tutor .tile.ice { outline: 4px solid #fff; outline-offset: 3px; animation: tutorPulse 1.1s ease-in-out infinite; }
+  @keyframes tutorPulse { 50% { outline-color: rgba(255,255,255,.15); } }
+  #swipeDemo .hand { position: absolute; left: 50%; top: 50%; font-size: calc(var(--size) * 0.16);
+    filter: drop-shadow(0 3px 4px rgba(0,0,0,.35)); animation: swipe 1.6s ease-in-out infinite; }
+  #swipeDemo .label { position: absolute; left: 50%; bottom: 5%; transform: translateX(-50%); white-space: nowrap;
+    background: rgba(60,50,40,.82); color: #fff; font-weight: 800; border-radius: 999px; padding: .35em .9em;
+    font-size: calc(var(--size) * 0.042); }
+  @keyframes swipe {
+    0% { transform: translate(-50%, -50%) translate(calc(var(--dx) * -1), calc(var(--dy) * -1)); opacity: 0; }
+    15% { opacity: 1; }
+    70% { transform: translate(-50%, -50%) translate(var(--dx), var(--dy)); opacity: 1; }
+    100% { transform: translate(-50%, -50%) translate(var(--dx), var(--dy)); opacity: 0; } }
   #board { position: relative; flex-shrink: 0; width: var(--size); height: var(--size); background: var(--board); border-radius: 8px; }
   .cell, .tile, .debris { position: absolute; border-radius: 6px; width: calc((var(--size) - var(--gap) * 5) / 4); height: calc((var(--size) - var(--gap) * 5) / 4); }
   .cell { background: var(--cell); }
@@ -129,6 +151,12 @@
   .controls { display: flex; gap: 8px; }
   button { background: #8f7a66; color: #fff; border: 0; border-radius: 6px; padding: 10px 16px; font-size: 16px; font-weight: 700; cursor: pointer; }
   button:disabled { opacity: .4; cursor: default; }
+  /* Bottom bar: icon-only buttons as wide as the board; the hint one is gold. */
+  .controls.bar { width: var(--size); gap: 10px; }
+  .controls.bar button { flex: 1; display: flex; justify-content: center; align-items: center; padding: 12px 0;
+    border-radius: 12px; box-shadow: 0 4px 0 #6f5d4d; font-size: 26px; }
+  .controls.bar .ic { width: 1em; height: 1em; vertical-align: 0; stroke-width: 2.4; }
+  .controls.bar #hintBtn { background: #edc22e; box-shadow: 0 4px 0 #c9a21b; }
   /* Undo + Restart share one stroke icon style. */
   .ic { width: 1.1em; height: 1.1em; vertical-align: -0.2em; fill: none; stroke: currentColor;
     stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
@@ -146,6 +174,15 @@
     overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; }
   #menu.show { display: flex; }
   #menu h1 { font-size: calc(var(--size) * 0.12); }
+  #menu .tagline { width: var(--size); text-align: center; font-weight: 600; font-size: clamp(14px, calc(var(--size) * 0.04), 18px); margin-top: -2vmin; }
+  #play { width: var(--size); font-size: clamp(20px, calc(var(--size) * 0.065), 30px); padding: .55em; border-radius: 10px;
+    background: #f59563; box-shadow: 0 4px 0 #c96f40; animation: playPulse 1.8s ease-in-out infinite; }
+  #play:active { transform: translateY(3px); box-shadow: 0 1px 0 #c96f40; }
+  @keyframes playPulse { 50% { transform: scale(1.03); } }
+  /* Live star rating in the goal bar: a star dims the moment it is lost. */
+  .goal .par .off { opacity: .25; }
+  .goal .par .drop { display: inline-block; animation: starDrop 500ms ease; }
+  @keyframes starDrop { 30% { transform: scale(1.6) rotate(-20deg); } }
   #grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; width: var(--size); }
   .lv { aspect-ratio: 1; border-radius: 8px; background: #8f7a66; color: #fff; display: flex; flex-direction: column;
     align-items: center; justify-content: center; font-size: calc(var(--size) * 0.07); font-weight: 800; padding: 0; }
@@ -153,22 +190,57 @@
   .lv small .off { color: rgba(255,255,255,.3); }
   .lv.locked { background: #cdc1b4; color: #fff; }
   .total { font-weight: 700; }
-  .hint { font-size: 13px; opacity: .7; text-align: center; max-width: var(--size); }
+  .hint { font-size: clamp(14px, calc(var(--size) * 0.036), 17px); font-weight: 600; text-align: center; width: var(--size);
+    min-height: 2.6em; display: flex; align-items: center; justify-content: center; line-height: 1.3; }
+  /* Levels without a hint drop the row; a small gap stays above the board. */
+  .hint:empty { display: none; }
+  .hint:empty + #board { margin-top: 3px; }
+  /* "No way to win" pill sits on the board's top edge, so nothing shifts. */
+  #warnPill { position: absolute; left: 50%; top: 0; transform: translate(-50%, -50%); z-index: 6; display: none;
+    background: #f28b30; color: #fff; font-weight: 800; font-size: clamp(12px, calc(var(--size) * 0.036), 15px);
+    padding: 6px 14px; border-radius: 999px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+  #board.lost #warnPill { display: block; animation: pillin 400ms ease; }
+  @keyframes pillin { from { opacity: 0; } to { opacity: 1; } }
+  /* Game-screen logo (L4): brown 2048 tiles + orange PUZZLE ribbon. Font = Lilita One (SIL OFL),
+     subset to "2048PUZLE" and embedded so the game stays one offline file. */
+  @font-face { font-family: 'p2048logo'; src: url(data:font/ttf;base64,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) format('truetype'); }
+  header { align-items: center; }
+  header .level { position: relative; top: 7px; }
+  .logo { display: inline-flex; align-items: center; margin: 0; }
+  .logo .tiles { display: flex; gap: 3px; }
+  .logo .tiles span { width: 30px; height: 34px; border-radius: 7px; display: flex; align-items: center; justify-content: center;
+    font: 24px 'p2048logo', sans-serif; color: #fff; background: #8f7a66; border: 2px solid #fff; box-shadow: 0 3px 0 #6f5d4d; }
+  .logo .tiles span:nth-child(1) { transform: translateY(2px) rotate(-4deg); }
+  .logo .tiles span:nth-child(2) { transform: translateY(-1px) rotate(2deg); }
+  .logo .tiles span:nth-child(3) { transform: translateY(1px) rotate(-2deg); }
+  .logo .tiles span:nth-child(4) { transform: translateY(-2px) rotate(4deg); }
+  .logo .rib { margin-left: -6px; background: #f65e3b; color: #fff; font: 13px 'p2048logo', sans-serif; letter-spacing: 2px;
+    padding: 3px 10px; transform: rotate(3deg); box-shadow: 0 3px 0 #c4401f; position: relative; z-index: 1; }
+  /* Menu logo (N4): the same L4 logo, larger and stacked — ribbon under the tiles. */
+  #menu h1.logo { flex-direction: column; justify-content: center; }
+  #menu .logo .tiles { gap: 7px; }
+  #menu .logo .tiles span { width: 64px; height: 74px; border-radius: 13px; font-size: 52px; border-width: 3px; box-shadow: 0 5px 0 #6f5d4d; }
+  #menu .logo .rib { margin: -11px 0 0; transform: rotate(-2deg); font-size: 27px; letter-spacing: 3px; padding: 7px 25px; box-shadow: 0 4px 0 #c4401f; }
 </style>
 </head>
 <body>
 <div id="menu">
-  <h1>Puzzle 2048</h1>
+  <h1 class="logo" aria-label="Puzzle 2048"><span class="tiles"><span>2</span><span>0</span><span>4</span><span>8</span></span><span class="rib">PUZZLE</span></h1>
+  <div class="tagline">Slide and merge the tiles to reach the target number. No new tiles ever appear.</div>
+  <button id="play"></button>
   <div class="total" id="total"></div>
   <div id="grid"></div>
 </div>
 <header>
-  <h1>Puzzle 2048</h1>
+  <h1 class="logo" aria-label="Puzzle 2048"><span class="tiles"><span>2</span><span>0</span><span>4</span><span>8</span></span><span class="rib">PUZZLE</span></h1>
   <div class="level" id="levelName"></div>
 </header>
-<div class="goal"><span>Make <span class="target" id="target"></span></span><span>Moves: <span id="moves">0</span></span></div>
+<div class="goal"><span class="aim">Merge tiles to make<span class="target" id="target"></span></span><span class="par"><b id="liveStars"></b> <span id="moves">0</span><span id="par"></span></span></div>
+<div class="hint" id="hint"></div>
 <div id="board">
+  <div id="warnPill"></div>
   <div id="railNext"></div>
+  <div id="swipeDemo"><div class="hand">👆</div><div class="label" id="swipeLabel"></div></div>
   <div id="result">
     <h2 id="resultTitle"></h2>
     <div id="stars"></div>
@@ -176,13 +248,12 @@
     <div class="controls"><button id="toMenu2">☰</button><button id="again"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Restart</button><button id="rewind"></button><button id="next">Next level ▶</button></div>
   </div>
 </div>
-<div class="controls">
-  <button id="toMenu">☰ Levels</button>
-  <button id="undo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg> Undo</button>
-  <button id="restart"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Restart</button>
+<div class="controls bar">
+  <button id="toMenu" aria-label="Levels" title="Levels"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+  <button id="undo" aria-label="Undo" title="Undo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+  <button id="restart" aria-label="Restart" title="Restart"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
+  <button id="hintBtn" aria-label="Hint" title="Hint"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"/></svg></button>
 </div>
-<div class="hint" id="hint"></div>
-
 <script>
 const N = 4;
 const HOLE = -1;
@@ -192,7 +263,7 @@ const STONE = -3; // a wall; two merges landing next to it break it
 const CHAIN = v => v + 0.25; // tile v in chains: never moves; the same value sliding in breaks them
 const canMerge = (a, b) => (a.value === b.value ? a.value !== X2 : a.value === X2 || b.value === X2);
 // Levels are verified with a BFS solver: `best` is the minimum number of moves.
-const LEVELS = [
+const ALL_LEVELS = [
   {
     name: 'Level 1',
     target: 16,
@@ -209,7 +280,7 @@ const LEVELS = [
     name: 'Level 2',
     target: 32,
     best: 4,
-    hint: 'Dark gaps are holes — tiles cannot slide through them.',
+    hint: '',
     board: [
       [16, 0, HOLE, 4],
       [0, 0, HOLE, 4],
@@ -221,7 +292,7 @@ const LEVELS = [
     name: 'Level 3',
     target: 32,
     best: 4,
-    hint: 'Plan ahead: some first moves already lose.',
+    hint: '',
     board: [
       [0, 4, 8, HOLE],
       [0, 0, 0, 0],
@@ -233,7 +304,7 @@ const LEVELS = [
     name: 'Level 4',
     target: 64,
     best: 5,
-    hint: 'Bigger target, same idea. Watch the orange edge.',
+    hint: '',
     board: [
       [HOLE, 16, 8, 0],
       [0, 0, 0, 0],
@@ -245,7 +316,7 @@ const LEVELS = [
     name: 'Level 5',
     target: 64,
     best: 5,
-    hint: 'Lots of 8s — pair them up in the right order.',
+    hint: '',
     board: [
       [0, HOLE, HOLE, 8],
       [8, 0, 0, 8],
@@ -257,7 +328,7 @@ const LEVELS = [
     name: 'Level 6',
     target: 64,
     best: 6,
-    hint: 'Two holes split the board. Use them as walls.',
+    hint: '',
     board: [
       [0, 4, 8, 16],
       [8, 8, 0, HOLE],
@@ -269,7 +340,7 @@ const LEVELS = [
     name: 'Level 7',
     target: 128,
     best: 6,
-    hint: 'Big tiles, few moves. Only one first move works.',
+    hint: '',
     board: [
       [0, 0, HOLE, 0],
       [0, 32, 16, 32],
@@ -281,7 +352,7 @@ const LEVELS = [
     name: 'Level 8',
     target: 128,
     best: 7,
-    hint: 'Holes everywhere. Think before you swipe.',
+    hint: '',
     board: [
       [0, 0, HOLE, 16],
       [0, HOLE, 16, 0],
@@ -293,7 +364,7 @@ const LEVELS = [
     name: 'Level 9',
     target: 128,
     best: 7,
-    hint: 'Line up the 16s before the 32s.',
+    hint: '',
     board: [
       [32, 32, 16, 0],
       [0, 0, HOLE, 0],
@@ -305,7 +376,7 @@ const LEVELS = [
     name: 'Level 10',
     target: 256,
     best: 9,
-    hint: 'Build 256.',
+    hint: '',
     board: [
       [0, 16, 64, 0],
       [0, 32, 64, HOLE],
@@ -317,7 +388,7 @@ const LEVELS = [
     name: 'Level 11',
     target: 32,
     best: 3,
-    hint: 'Blue tiles are frozen: they cannot move. Merge right next to one to melt it.',
+    hint: '',
     board: [
       [0, 0, 4, 0],
       [0, 0, 4, 8],
@@ -329,7 +400,7 @@ const LEVELS = [
     name: 'Level 12',
     target: 64,
     best: 5,
-    hint: 'Every tile is needed, so the ice has to melt.',
+    hint: '',
     board: [
       [0, 8, 16, 16],
       [0, ICE(16), 0, 0],
@@ -341,7 +412,7 @@ const LEVELS = [
     name: 'Level 13',
     target: 64,
     best: 6,
-    hint: 'Two ice blocks. Which one should melt first?',
+    hint: '',
     board: [
       [4, 4, 0, 16],
       [ICE(8), 0, ICE(32), 0],
@@ -353,7 +424,7 @@ const LEVELS = [
     name: 'Level 14',
     target: 128,
     best: 7,
-    hint: 'Ice is a wall until it melts. Use it.',
+    hint: '',
     board: [
       [ICE(16), 0, HOLE, 0],
       [32, 0, 32, 0],
@@ -365,7 +436,7 @@ const LEVELS = [
     name: 'Level 15',
     target: 128,
     best: 7,
-    hint: 'Final ice test.',
+    hint: '',
     board: [
       [0, 16, ICE(16), 0],
       [16, 32, 0, 0],
@@ -389,7 +460,7 @@ const LEVELS = [
     name: 'Level 17',
     target: 64,
     best: 4,
-    hint: 'Save the ×2 for a big tile. Spending it early loses.',
+    hint: '',
     board: [
       [0, 0, 8, X2],
       [HOLE, 0, 0, 0],
@@ -401,7 +472,7 @@ const LEVELS = [
     name: 'Level 18',
     target: 128,
     best: 5,
-    hint: 'Build the biggest tile first, then double it.',
+    hint: '',
     board: [
       [0, 16, 16, 16],
       [0, HOLE, X2, 0],
@@ -413,7 +484,7 @@ const LEVELS = [
     name: 'Level 19',
     target: 128,
     best: 6,
-    hint: 'Ice and ×2 together. Plan for both.',
+    hint: '',
     board: [
       [16, X2, HOLE, 0],
       [0, 0, 16, 0],
@@ -425,7 +496,7 @@ const LEVELS = [
     name: 'Level 20',
     target: 256,
     best: 7,
-    hint: 'Two ×2 blocks. They cannot merge with each other.',
+    hint: '',
     board: [
       [X2, X2, 16, 8],
       [32, 0, 0, 0],
@@ -434,14 +505,14 @@ const LEVELS = [
     ],
   },
   {
-    name: 'Level 21',
+    name: 'Level 21', // stone intro (gen_intro.js stone): every 3-star line cracks it on swipe 1, breaks it on swipe 2
     target: 32,
-    best: 3,
+    best: 4,
     hint: 'Stone blocks the way. Two merges next to it break it.',
     board: [
-      [8, STONE, 0, 0],
-      [0, 0, 0, 8],
-      [0, 8, 0, 8],
+      [8, STONE, 4, 0],
+      [0, 8, 0, 4],
+      [0, 8, 0, 0],
       [0, 0, 0, 0],
     ],
   },
@@ -449,7 +520,7 @@ const LEVELS = [
     name: 'Level 22',
     target: 64,
     best: 6,
-    hint: 'You cannot win around the stone. Break through it.',
+    hint: '',
     board: [
       [16, 0, 0, 16],
       [0, 8, 0, 8],
@@ -461,7 +532,7 @@ const LEVELS = [
     name: 'Level 23',
     target: 64,
     best: 5,
-    hint: 'Two stones. Pick the one that opens the board.',
+    hint: '',
     board: [
       [16, STONE, 4, 4],
       [STONE, 0, 0, 0],
@@ -473,7 +544,7 @@ const LEVELS = [
     name: 'Level 24',
     target: 128,
     best: 7,
-    hint: 'Stone and ice. Every merge counts.',
+    hint: '',
     board: [
       [ICE(32), 0, 16, 16],
       [0, 0, 0, 0],
@@ -485,7 +556,7 @@ const LEVELS = [
     name: 'Level 25',
     target: 128,
     best: 9,
-    hint: 'Final stone test. Long road, few merges to spare.',
+    hint: '',
     board: [
       [32, STONE, 16, 16],
       [HOLE, STONE, 16, 0],
@@ -504,65 +575,83 @@ const LEVELS = [
       [0, 0, 0, 0],
       [0, 0, 0, 0],
     ],
+    parked: true, // rail levels: out of the game for now, kept for later
     rail: { track: [[2, 0], [2, 1], [2, 2]], idx: 2, dir: -1 },
   },
   {
     name: 'Level 27',
     target: 64,
     best: 5,
-    hint: 'Use the steel block as a stopper to park tiles mid-board.',
+    hint: '',
     board: [
       [8, 0, 0, 32],
       [0, 0, HOLE, 8],
       [0, 0, 0, 16],
       [0, 0, 0, 0],
     ],
+    parked: true, // rail levels: out of the game for now, kept for later
     rail: { track: [[1, 0], [2, 0], [3, 0]], idx: 1, dir: 1 },
   },
   {
     name: 'Level 28',
     target: 64,
     best: 7,
-    hint: 'A tile on the rail makes the block wait. Hold it where you need it.',
+    hint: '',
     board: [
       [32, 0, 0, 0],
       [4, 0, 0, 0],
       [0, 16, 0, 0],
       [0, 8, HOLE, 4],
     ],
+    parked: true, // rail levels: out of the game for now, kept for later
     rail: { track: [[0, 3], [1, 3], [2, 3]], idx: 1, dir: 1 },
   },
   {
     name: 'Level 29',
     target: 128,
     best: 6,
-    hint: 'A longer rail, and ice to melt. Time your merges.',
+    hint: '',
     board: [
       [0, 32, 0, 0],
       [32, 0, 0, 0],
       [32, ICE(16), 0, 0],
       [0, 0, 0, 16],
     ],
+    parked: true, // rail levels: out of the game for now, kept for later
     rail: { track: [[0, 2], [1, 2], [2, 2], [3, 2]], idx: 1, dir: 1 },
   },
   {
     name: 'Level 30',
     target: 128,
     best: 8,
-    hint: 'Final rail test: a stone, a hole and the moving block.',
+    hint: '',
     board: [
       [0, HOLE, 64, 16],
       [0, 8, 32, 0],
       [0, 0, 0, 8],
       [0, STONE, 0, 0],
     ],
+    parked: true, // rail levels: out of the game for now, kept for later
     rail: { track: [[0, 0], [1, 0], [2, 0], [3, 0]], idx: 0, dir: -1 },
+  },
+  {
+    name: 'Mud intro', // gentle first mud level (gen_intro.js mud): no win at all skips the mud — the 16 must park in it
+    target: 32,
+    best: 3,
+    hint: 'Brown cells are mud. A tile that slides in gets stuck there for that swipe.',
+    board: [
+      [0, 8, 16, 0],
+      [0, 0, 0, 8],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+    ],
+    mud: ['....', '..M.', '....', '....'],
   },
   {
     name: 'Level 31',
     target: 64,
     best: 7,
-    hint: 'Brown cells are mud. A tile that slides in gets stuck there for that swipe.',
+    hint: '',
     board: [
       [0, 0, 0, 0],
       [0, 16, 0, 8],
@@ -575,7 +664,7 @@ const LEVELS = [
     name: 'Level 32',
     target: 64,
     best: 6,
-    hint: 'Park a tile in the mud so the next one has something to hit.',
+    hint: '',
     board: [
       [0, 0, 0, 16],
       [0, 0, 0, 4],
@@ -588,7 +677,7 @@ const LEVELS = [
     name: 'Level 33',
     target: 128,
     best: 6,
-    hint: 'Two mud pits on the bottom row. Plan which tile lands where.',
+    hint: '',
     board: [
       [32, 8, 0, 8],
       [0, 0, 0, 0],
@@ -601,7 +690,7 @@ const LEVELS = [
     name: 'Level 34',
     target: 128,
     best: 7,
-    hint: 'Mud and ice. A stuck tile cannot merge, so it cannot melt anything either.',
+    hint: '',
     board: [
       [32, 32, 0, 0],
       [0, 0, 16, 16],
@@ -614,7 +703,7 @@ const LEVELS = [
     name: 'Level 35',
     target: 128,
     best: 7,
-    hint: 'Final mud test: a ×2, a stone and two mud pits.',
+    hint: '',
     board: [
       [0, 0, 0, X2],
       [32, 8, 0, 8],
@@ -624,10 +713,22 @@ const LEVELS = [
     mud: ['.M..', '..M.', '....', '....'],
   },
   {
+    name: 'Chain intro', // gentle first chain level (gen_intro.js)
+    target: 32,
+    best: 3,
+    hint: 'A chained tile cannot move. Slide the same number into it to break the chains.',
+    board: [
+      [0, 0, CHAIN(8), 0],
+      [8, 0, 0, 16],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+    ],
+  },
+  {
     name: 'Level 36',
     target: 64,
     best: 6,
-    hint: 'A chained tile cannot move. Slide the same number into it to break the chains.',
+    hint: '',
     board: [
       [0, 0, 0, 0],
       [16, CHAIN(16), 16, HOLE],
@@ -639,7 +740,7 @@ const LEVELS = [
     name: 'Level 37',
     target: 64,
     best: 5,
-    hint: 'Two chained 8s. Each one needs its own 8.',
+    hint: '',
     board: [
       [CHAIN(8), 8, 0, 8],
       [0, 0, CHAIN(8), 0],
@@ -651,7 +752,7 @@ const LEVELS = [
     name: 'Level 38',
     target: 128,
     best: 6,
-    hint: 'A chained tile is a wall too. Use it before you break it.',
+    hint: '',
     board: [
       [0, CHAIN(16), 64, 0],
       [0, 16, 0, 0],
@@ -663,7 +764,7 @@ const LEVELS = [
     name: 'Level 39',
     target: 128,
     best: 8,
-    hint: 'Chains and ice. Break one, melt the other.',
+    hint: '',
     board: [
       [32, CHAIN(32), 0, 16],
       [0, 0, 0, 0],
@@ -675,7 +776,7 @@ const LEVELS = [
     name: 'Level 40',
     target: 128,
     best: 9,
-    hint: 'Final chain test: two chains, a stone and a ×2.',
+    hint: '',
     board: [
       [0, 0, 0, 8],
       [8, CHAIN(16), HOLE, 0],
@@ -683,7 +784,172 @@ const LEVELS = [
       [CHAIN(16), 0, 0, 32],
     ],
   },
+  {
+    name: 'Mix 1', // gen_mix.js 41: ice + ×2, both needed (sol RUULL)
+    target: 64,
+    best: 5,
+    hint: '',
+    board: [
+      [HOLE, 8, 0, 0],
+      [4, 0, 0, 0],
+      [16, X2, ICE(16), 0],
+      [4, 0, 0, 0],
+    ],
+  },
+  {
+    name: 'Mix 2', // gen_mix.js 44: ×2 + chain (sol RDRUUL)
+    target: 128,
+    best: 6,
+    hint: '',
+    board: [
+      [16, 0, 0, CHAIN(32)],
+      [X2, 32, 8, 0],
+      [8, 0, 0, 0],
+      [0, 0, 0, 0],
+    ],
+  },
+  {
+    name: 'Mix 3', // gen_mix.js 42: stone + chain (sol RURDLUL)
+    target: 64,
+    best: 7,
+    hint: '',
+    board: [
+      [CHAIN(16), 4, 0, 0],
+      [0, 0, 0, 0],
+      [CHAIN(8), 4, 0, 32],
+      [STONE, 0, 0, 0],
+    ],
+  },
+  {
+    name: 'Mix 4', // gen_mix.js 45: mud + chain (sol DLDRDLL)
+    target: 128,
+    best: 7,
+    hint: '',
+    board: [
+      [16, 16, 0, 0],
+      [0, CHAIN(16), 0, 0],
+      [0, 64, 0, 0],
+      [0, 0, 0, CHAIN(16)],
+    ],
+    mud: ['....', 'M...', '....', '....'],
+  },
+  {
+    name: 'Mix 5', // gen_mix.js 43: mud + ice (sol DRLULUUL)
+    target: 128,
+    best: 8,
+    hint: '',
+    board: [
+      [0, 0, 64, 0],
+      [16, 16, 0, 0],
+      [0, 0, 0, 0],
+      [0, 0, 16, ICE(16)],
+    ],
+    mud: ['....', '....', 'M...', '....'],
+  },
+  {
+    name: 'Mix 6', // gen_mix.js 46: stone + ice (sol DRRULLU)
+    target: 128,
+    best: 7,
+    hint: '',
+    board: [
+      [8, 8, 0, 0],
+      [0, 0, 16, 0],
+      [0, 0, 0, 64],
+      [16, STONE, ICE(16), 0],
+    ],
+  },
+  {
+    name: 'Mix 7', // gen_mix.js 47: ×2 + mud (sol LDRDLLUUL)
+    target: 128,
+    best: 9,
+    hint: '',
+    board: [
+      [0, 8, 16, 0],
+      [0, 0, X2, 0],
+      [0, 0, 16, 32],
+      [8, 0, 0, 16],
+    ],
+    mud: ['....', '.M..', '....', '....'],
+  },
+  {
+    name: 'Mix 8', // gen_mix.js 48: finale, ice + chain + ×2 (sol ULRDLDRDLL)
+    target: 128,
+    best: 10,
+    hint: '',
+    board: [
+      [HOLE, ICE(8), 4, 0],
+      [0, 0, 0, 4],
+      [0, X2, 0, 32],
+      [0, 0, CHAIN(32), CHAIN(16)],
+    ],
+  },
+  {
+    name: 'Hard 1', // gen_mix.js 50: extra hard, mud+×2+ice (sol LLRDLDRLLU)
+    target: 256,
+    best: 10,
+    hint: '',
+    board: [
+      [64, 0, 0, X2],
+      [0, 0, 0, 16],
+      [32, 0, 0, 32],
+      [0, 16, ICE(32), 0],
+    ],
+    mud: ['..M.', '....', '....', 'M...'],
+  },
+  {
+    name: 'Hard 2', // gen_mix.js 49: extra hard, ice+stone+chain (sol RURDLURDLLU)
+    target: 256,
+    best: 11,
+    hint: '',
+    board: [
+      [32, 0, 0, 0],
+      [0, 0, STONE, 64],
+      [0, CHAIN(64), CHAIN(32), 0],
+      [32, 0, 0, ICE(32)],
+    ],
+  },
+  {
+    name: 'Hard 3', // gen_mix.js 51: extra hard, chain+stone+mud (sol DLLULDRRUUL)
+    target: 256,
+    best: 11,
+    hint: '',
+    board: [
+      [32, HOLE, 0, CHAIN(64)],
+      [STONE, 0, 32, 0],
+      [0, 0, 64, 0],
+      [0, 32, 0, 32],
+    ],
+    mud: ['....', '....', 'MM..', '....'],
+  },
+  {
+    name: 'Hard 4', // gen_mix.js 53: extra hard, ice+mud+chain+×2 (sol URDRLLULDDL)
+    target: 256,
+    best: 11,
+    hint: '',
+    board: [
+      [ICE(32), 16, 0, HOLE],
+      [0, 0, 0, 16],
+      [X2, 0, 0, 32],
+      [CHAIN(32), 32, 32, 0],
+    ],
+    mud: ['....', 'MM..', '....', '....'],
+  },
+  {
+    name: 'Hard 5', // gen_mix.js 52: extra hard, ×2+stone+chain (sol RULRDRULURUDL)
+    target: 256,
+    best: 13,
+    hint: '',
+    board: [
+      [STONE, 32, HOLE, CHAIN(32)],
+      [0, 32, 0, 32],
+      [CHAIN(32), 0, X2, 0],
+      [0, 0, 32, 0],
+    ],
+  },
 ];
+// Parked levels stay in the file but are not played; the rest are renumbered.
+const LEVELS = ALL_LEVELS.filter(l => !l.parked);
+LEVELS.forEach((l, i) => { l.name = `Level ${i + 1}`; });
 const COLORS = {
   2: ['#eee4da', '#776e65'], 4: ['#ede0c8', '#776e65'], 8: ['#f2b179', '#fff'], 16: ['#f59563', '#fff'],
   32: ['#f67c5f', '#fff'], 64: ['#f65e3b', '#fff'], 128: ['#edcf72', '#fff'], 256: ['#edcc61', '#fff'],
@@ -791,6 +1057,9 @@ for (const [name, haptic] of Object.entries(HAPTICS)) {
 const boardEl = document.getElementById('board');
 const result = document.getElementById('result');
 let level, grid, moves, history, nextId, finished;
+let shownStars = 3; // stars still reachable, shown live in the goal bar
+let hinted = false, hintDir = null; // 💡: a used hint caps the level at 2 stars; hintDir shows until the next move
+let tutor = null; // 'swipe' on levels 1-2, 'ice' on the first ice level, else null
 
 function pos(r, c) {
   const step = `((var(--size) - var(--gap) * 5) / 4 + var(--gap))`;
@@ -799,6 +1068,7 @@ function pos(r, c) {
 
 function load(index) {
   level = LEVELS[index];
+  tutor = index < 2 ? 'swipe' : index === 10 ? 'ice' : null;
   boardEl.querySelectorAll('.cell, .tile').forEach(el => el.remove());
   nextId = 1; moves = 0; history = []; finished = false;
   grid = level.board.map(row => row.map(v => (v > 0 && v % 1 ? { id: nextId++, value: Math.floor(v), chain: true }
@@ -820,11 +1090,51 @@ function load(index) {
     boardEl.prepend(cell);
   }
   document.getElementById('levelName').textContent = level.name;
-  document.getElementById('target').textContent = level.target;
+  const tgt = document.getElementById('target'), [tbg, tfg] = COLORS[level.target] || ['#3c3a32', '#fff'];
+  tgt.textContent = level.target; tgt.style.background = tbg; tgt.style.color = tfg;
+  shownStars = 3; hinted = false; hintDir = null;
   document.getElementById('hint').textContent = level.hint;
   result.classList.remove('show');
   setWinnable(true);
   render();
+}
+
+// Tutorial hand. Levels 1-2: loop a swipe until the first move. First ice
+// level: walk the player to the first melt, one step of the shortest winning
+// path at a time, with the ice outlined.
+function firstStepToMelt() {
+  const seen = new Set([JSON.stringify(grid)]);
+  let layer = [{ g: grid, first: null }];
+  for (let depth = 0; depth < 6 && layer.length; depth++) {
+    const nextLayer = [];
+    for (const { g, first } of layer) for (const d of ['left', 'right', 'up', 'down']) {
+      const r = slide(g, d);
+      if (!r.moved || !canWin(r.next)) continue;
+      if (r.next.flat().some(t => t && t.melted)) return first || d;
+      const k = JSON.stringify(r.next);
+      if (!seen.has(k)) { seen.add(k); nextLayer.push({ g: r.next, first: first || d }); }
+    }
+    layer = nextLayer;
+  }
+  return null;
+}
+
+function updateTutor() {
+  const demo = document.getElementById('swipeDemo');
+  const iceOn = tutor === 'ice' && grid.flat().some(t => t && t.ice);
+  boardEl.classList.toggle('tutor', iceOn);
+  const on = (tutor === 'swipe' && moves === 0) || iceOn;
+  const dir = hintDir && winnable && !finished ? hintDir : on && winnable && !finished && (tutor === 'ice' ? firstStepToMelt()
+    : ['left', 'right', 'up', 'down'].find(d => { const r = slide(grid, d); return r.moved && canWin(r.next); }));
+  demo.classList.toggle('show', !!dir);
+  if (!dir) { if (iceOn && winnable) document.getElementById('swipeLabel').textContent = ''; return; }
+  const far = 'calc(var(--size) * 0.22)';
+  demo.style.setProperty('--dx', dir === 'left' ? `calc(${far} * -1)` : dir === 'right' ? far : '0px');
+  demo.style.setProperty('--dy', dir === 'up' ? `calc(${far} * -1)` : dir === 'down' ? far : '0px');
+  const touch = matchMedia('(pointer: coarse)').matches;
+  const how = touch ? `Swipe ${dir}` : `Swipe or press ${{ left: '←', right: '→', up: '↑', down: '↓' }[dir]}`;
+  document.getElementById('swipeLabel').textContent = hintDir ? `Hint: ${how}` : tutor === 'ice'
+    ? (moves === 0 ? 'Merge next to the ice to melt it' : `${how} — merge next to the ice`) : `${how} to slide all tiles`;
 }
 
 function lineCoords(i, dir) {
@@ -935,6 +1245,7 @@ function move(dir) {
   });
   grid = next;
   moves++;
+  hintDir = null;
   render();
   checkEnd();
 }
@@ -943,6 +1254,7 @@ function undo() {
   if (!history.length || finished) return;
   grid = history.pop().grid;
   moves--;
+  hintDir = null;
   sfx.undo();
   boardEl.querySelectorAll('.tile').forEach(el => el.remove());
   setWinnable(canWin(grid));
@@ -977,9 +1289,11 @@ function setWinnable(ok) {
   winnable = ok;
   boardEl.classList.toggle('lost', !ok);
   document.getElementById('undo').classList.toggle('urge', !ok);
-  const hint = document.getElementById('hint');
-  hint.classList.toggle('warn', !ok);
-  hint.textContent = ok ? level.hint : `No way to win from here · ${undoLabel(stepsToWinnable())}`;
+  if (!ok) document.getElementById('warnPill').textContent = `No way to win from here · ${undoLabel(stepsToWinnable())}`;
+}
+
+function starCap() {
+  return Math.min(hinted ? 2 : 3, moves <= level.best ? 3 : moves <= level.best + 2 ? 2 : 1);
 }
 
 function render() {
@@ -1008,6 +1322,12 @@ function render() {
   }
   document.getElementById('moves').textContent = moves;
   document.getElementById('undo').disabled = !history.length;
+  const can = starCap();
+  document.getElementById('liveStars').innerHTML = [1, 2, 3].map(k =>
+    `<span class="${k > can ? 'off' : ''}${k === can + 1 && can < shownStars ? ' drop' : ''}">★</span>`).join('');
+  document.getElementById('par').textContent = can === 3 ? ` / ${level.best}` : can === 2 ? ` / ${level.best + 2}` : '';
+  shownStars = can;
+  updateTutor();
 }
 
 // A burst of chips (rock or chain links) flying out of one cell.
@@ -1032,7 +1352,7 @@ function tiles() { return grid.flat().filter(t => t && t !== HOLE); }
 
 function checkEnd() {
   if (tiles().some(t => !t.ice && t.value >= level.target)) {
-    const stars = moves <= level.best ? 3 : moves <= level.best + 2 ? 2 : 1;
+    const stars = starCap();
     saveStars(LEVELS.indexOf(level), stars);
     showResult('Level clear!', stars, `${moves} moves · best is ${level.best}`);
     return;
@@ -1085,6 +1405,35 @@ function showResult(title, stars, note) {
 }
 
 document.getElementById('undo').onclick = undo;
+
+// 💡 Hint: the first swipe of a shortest win from here, shown with the tutorial
+// hand. On a board that can't be won it points at Undo instead.
+function nextBestMove() {
+  const key = g => JSON.stringify(g);
+  const seen = new Set([key(grid)]);
+  let layer = [{ g: grid, first: null }];
+  while (layer.length) {
+    const nextLayer = [];
+    for (const { g, first } of layer) for (const d of ['left', 'right', 'up', 'down']) {
+      const { next, moved } = slide(g, d);
+      if (!moved) continue;
+      if (next.flat().some(t => t && t !== HOLE && !t.ice && t.value >= level.target)) return first || d;
+      const k = key(next);
+      if (!seen.has(k)) { seen.add(k); nextLayer.push({ g: next, first: first || d }); }
+    }
+    layer = nextLayer;
+  }
+  return null;
+}
+document.getElementById('hintBtn').onclick = () => {
+  if (finished || hintDir) return;
+  if (!winnable) { sfx.warn(); return; }
+  hintDir = nextBestMove();
+  if (!hintDir) return;
+  hinted = true;
+  sfx.undo();
+  render();
+};
 document.getElementById('rewind').onclick = () => { result.classList.remove('show'); finished = false; rewind(); };
 document.getElementById('next').onclick = () => load(LEVELS.indexOf(level) + 1);
 
@@ -1113,6 +1462,12 @@ function showMenu() {
     b.onclick = () => { document.getElementById('menu').classList.remove('show'); load(i); };
     grid.appendChild(b);
   });
+  // Play continues at the first level not cleared yet (or the last one once all are done).
+  const nextUp = Math.max(0, Math.min(LEVELS.length - 1, LEVELS.findIndex((l, i) => !progress[i]) === -1
+    ? LEVELS.length - 1 : LEVELS.findIndex((l, i) => !progress[i])));
+  const play = document.getElementById('play');
+  play.textContent = `▶ Play · Level ${nextUp + 1}`;
+  play.onclick = () => { document.getElementById('menu').classList.remove('show'); load(nextUp); };
   const earned = progress.reduce((a, b) => a + (b || 0), 0);
   document.getElementById('total').textContent = `★ ${earned} / ${LEVELS.length * 3}`;
   document.getElementById('menu').classList.add('show');
