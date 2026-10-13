@@ -1093,6 +1093,8 @@ function load(index) {
   const tgt = document.getElementById('target'), [tbg, tfg] = COLORS[level.target] || ['#3c3a32', '#fff'];
   tgt.textContent = level.target; tgt.style.background = tbg; tgt.style.color = tfg;
   shownStars = 3; hinted = false; hintDir = null;
+  winMemo = new Map();
+  setTimeout(buildWinMemo, 30);
   document.getElementById('hint').textContent = level.hint;
   result.classList.remove('show');
   setWinnable(true);
@@ -1366,13 +1368,58 @@ function checkEnd() {
 
 // Breadth-first search over every reachable board. With no new tiles the
 // state space is tiny, so this runs after every move.
+const stateKey = g => g.map(row => row.map(t => (t === HOLE ? '#' : !t ? 0 : t.stone ? 's' + t.stone : t.rail ? 'r' + t.idx + t.dir : t.chain ? 'c' + t.value : (t.ice ? 'i' : '') + t.value)).join(',')).join('/');
+const reached = g => g.flat().some(t => t && t !== HOLE && !t.ice && t.value >= level.target);
+
+// Right after a level loads, map every board reachable from the start to "can still win",
+// so a swipe only looks its board up instead of searching (big levels took ~60ms per swipe).
+// Built in 6ms slices so the page never freezes; until it is done, canWin() searches as before.
+let winMemo = new Map();
+function buildWinMemo() {
+  const lv = level, nodes = new Map(), order = [];
+  const k0 = stateKey(grid);
+  nodes.set(k0, { g: grid, prev: [] }); order.push(k0);
+  const wins = [];
+  let i = 0;
+  const step = () => {
+    if (level !== lv) return;
+    const until = performance.now() + 6;
+    for (; i < order.length && performance.now() < until; i++) expand(i);
+    if (i < order.length) setTimeout(step, 0); else finish();
+  };
+  const expand = i => {
+    const n = nodes.get(order[i]);
+    if (reached(n.g)) { wins.push(order[i]); n.g = null; return; }
+    for (const d of ['left', 'right', 'up', 'down']) {
+      const { next, moved } = slide(n.g, d);
+      if (!moved) continue;
+      const k = stateKey(next);
+      if (!nodes.has(k)) { nodes.set(k, { g: next, prev: [] }); order.push(k); }
+      nodes.get(k).prev.push(order[i]);
+    }
+    n.g = null;
+  };
+  const finish = () => {
+    const memo = new Map(order.map(k => [k, false]));
+    for (let q = wins; q.length;) {
+      const nq = [];
+      for (const k of q) if (!memo.get(k)) { memo.set(k, true); nq.push(...nodes.get(k).prev); }
+      q = nq;
+    }
+    if (level === lv) winMemo = memo;
+  };
+  step();
+}
+
 function canWin(start) {
-  const key = g => g.map(row => row.map(t => (t === HOLE ? '#' : !t ? 0 : t.stone ? 's' + t.stone : t.rail ? 'r' + t.idx + t.dir : t.chain ? 'c' + t.value : (t.ice ? 'i' : '') + t.value)).join(',')).join('/');
+  const known = winMemo.get(stateKey(start));
+  if (known !== undefined) return known;
+  const key = stateKey;
   const seen = new Set([key(start)]);
   const queue = [start];
   while (queue.length) {
     const g = queue.shift();
-    if (g.flat().some(t => t && t !== HOLE && !t.ice && t.value >= level.target)) return true;
+    if (reached(g)) return true;
     for (const d of ['left', 'right', 'up', 'down']) {
       const { next, moved } = slide(g, d);
       if (!moved) continue;
@@ -1484,12 +1531,26 @@ document.addEventListener('keydown', e => {
   if (KEYS[e.key]) { e.preventDefault(); move(KEYS[e.key]); }
   if (e.key === 'z' || e.key === 'Backspace') undo();
 });
-let sx = 0, sy = 0;
-document.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+// A swipe counts as soon as the finger has travelled 24px (no waiting for it to lift);
+// one move per touch. Touching also wakes the audio so the first sound isn't late.
+let sx = 0, sy = 0, swiped = false;
+const swipeDir = (dx, dy) => (Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+document.addEventListener('touchstart', e => {
+  sx = e.touches[0].clientX; sy = e.touches[0].clientY; swiped = false;
+  audio();
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (swiped) return;
+  const dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+  swiped = true;
+  move(swipeDir(dx, dy));
+}, { passive: true });
 document.addEventListener('touchend', e => {
+  if (swiped) return;
   const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
-  if (Math.max(Math.abs(dx), Math.abs(dy)) < 30) return;
-  move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+  move(swipeDir(dx, dy));
 });
 
 // Zoom/resize changes --size; snap tiles instead of letting them slide to the new spots.
