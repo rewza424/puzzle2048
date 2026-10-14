@@ -1099,6 +1099,16 @@ const result = document.getElementById('result');
 let level, grid, moves, history, nextId, finished;
 let shownStars = 3; // stars still reachable, shown live in the goal bar
 let hinted = false, hintDir = null; // 💡: a used hint caps the level at 2 stars; hintDir shows until the next move
+// The 2★ cap sticks to the level (restart, menu, reload) until it is cleared, so 💡 → Restart
+// can't hand out the answer for free. After a clear, Play again starts clean.
+const HINT_KEY = 'puzzle2048-hinted';
+let hintLocked = [];
+try { hintLocked = JSON.parse(localStorage.getItem(HINT_KEY)) || []; } catch (e) {}
+function lockHint(name, on) {
+  hintLocked = hintLocked.filter(n => n !== name);
+  if (on) hintLocked.push(name);
+  try { localStorage.setItem(HINT_KEY, JSON.stringify(hintLocked)); } catch (e) {}
+}
 let tutor = null; // 'swipe' on levels 1-2, 'ice' on the first ice level, else null
 
 function pos(r, c) {
@@ -1141,7 +1151,7 @@ function load(index) {
   document.getElementById('levelName').textContent = level.name;
   const tgt = document.getElementById('target'), [tbg, tfg] = COLORS[level.target] || ['#3c3a32', '#fff'];
   tgt.textContent = level.target; tgt.style.background = tbg; tgt.style.color = tfg;
-  shownStars = 3; hinted = false; hintDir = null; shownLost = false; beforeRestart = null;
+  hinted = hintLocked.includes(level.name); shownStars = hinted ? 2 : 3; hintDir = null; shownLost = false; beforeRestart = null;
   winMemo = new Map();
   setTimeout(buildWinMemo, 30);
   document.getElementById('hint').textContent = level.hint;
@@ -1483,6 +1493,7 @@ function restoreRun(run) {
   if (i < 0 || JSON.stringify(LEVELS[i].board) !== JSON.stringify(run.board) || !unlocked(i)) return;
   load(i);
   ({ grid, history, moves, hinted } = run);
+  hinted = hinted || hintLocked.includes(level.name);
   boardEl.querySelectorAll('.tile').forEach(el => el.remove());
   shownStars = starCap();
   setWinnable(canWin(grid));
@@ -1513,6 +1524,7 @@ function checkEnd() {
   if (tiles().some(t => !t.ice && t.value >= level.target)) {
     const stars = starCap();
     saveStars(LEVELS.indexOf(level), stars);
+    if (hinted) lockHint(level.name, false);
     showResult('Level clear!', stars, `${moves} moves · best is ${level.best}`);
     return;
   }
@@ -1653,6 +1665,7 @@ document.getElementById('hintBtn').onclick = () => {
     setTimeout(() => fall.remove(), 750);
   }
   hinted = true;
+  lockHint(level.name, true);
   sfx.undo();
   render();
 };
