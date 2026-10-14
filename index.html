@@ -168,7 +168,24 @@
   .controls.bar button { flex: 1; display: flex; justify-content: center; align-items: center; padding: 12px 0;
     border-radius: 12px; box-shadow: 0 4px 0 #6f5d4d; font-size: 26px; }
   .controls.bar .ic { width: 1em; height: 1em; vertical-align: 0; stroke-width: 2.4; }
-  .controls.bar #hintBtn { background: #edc22e; box-shadow: 0 4px 0 #c9a21b; }
+  .controls.bar #hintBtn { background: #edc22e; box-shadow: 0 4px 0 #c9a21b; position: relative; }
+  /* −★ on the hint button while using it would still cost a star. */
+  #hintCost { position: absolute; top: -7px; right: -7px; }
+  #hintCost, .costFall { background: #d9534f; color: #fff; font: 800 12px/1 system-ui, sans-serif;
+    padding: 4px 6px; border-radius: 999px; box-shadow: 0 2px 0 #a33; pointer-events: none; }
+  #hintCost[hidden] { display: none; }
+  /* Using 💡 knocks the −★ off the button: it hops, then tumbles down and fades. */
+  .costFall { position: fixed; z-index: 60; margin: 0; animation: costFall 700ms cubic-bezier(.45, 0, .8, .6) forwards; }
+  @keyframes costFall { 18% { transform: translateY(-8px) rotate(-12deg); } 100% { transform: translateY(80px) rotate(40deg); opacity: 0; } }
+  /* Hold a block (or hover it with a mouse) to see what it does. */
+  #ruleTip { position: absolute; z-index: 9; display: none; width: max-content; max-width: min(220px, 70%); background: #5b4a3d; color: #fff;
+    font: 700 clamp(12px, calc(var(--size) * 0.034), 14px)/1.3 system-ui, sans-serif; padding: 8px 12px; border-radius: 12px;
+    text-align: center; box-shadow: 0 3px 8px rgba(0,0,0,.3); pointer-events: none; }
+  #ruleTip.show { display: block; animation: pillin 150ms ease; }
+  #ruleTip::after { content: ''; position: absolute; left: var(--ax); transform: translateX(-50%); border: 8px solid transparent; }
+  #ruleTip.above::after { bottom: -8px; border-bottom: 0; border-top-color: #5b4a3d; }
+  #ruleTip.below::after { top: -8px; border-top: 0; border-bottom-color: #5b4a3d; }
+  .tile.tipped, .cell.tipped { outline: 4px solid #fff; outline-offset: 2px; z-index: 8; }
   /* Pressed: the 3D button sinks onto its shadow. */
   .controls.bar button { transition: transform 60ms ease, box-shadow 60ms ease; }
   /* .pressed is held for at least 120ms (see the fast-tap code), so even a quick tap shows it;
@@ -261,6 +278,7 @@
 <div class="hint" id="hint"></div>
 <div id="board">
   <div id="warnPill"></div>
+  <div id="ruleTip"></div>
   <div id="railNext"></div>
   <div id="swipeDemo"><div class="hand">👆</div><div class="label" id="swipeLabel"></div></div>
   <div id="result">
@@ -271,10 +289,10 @@
   </div>
 </div>
 <div class="controls bar">
-  <button id="toMenu" aria-label="Levels" title="Levels"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
-  <button id="undo" aria-label="Undo" title="Undo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
-  <button id="restart" aria-label="Restart" title="Restart"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
-  <button id="hintBtn" aria-label="Hint" title="Hint"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"/></svg></button>
+  <button id="toMenu" aria-label="Levels" title="Levels (Esc)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+  <button id="undo" aria-label="Undo" title="Undo (Z)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+  <button id="restart" aria-label="Restart" title="Restart (R)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
+  <button id="hintBtn" aria-label="Hint" title="Hint (H)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"/></svg><span id="hintCost">−★</span></button>
 </div>
 <script>
 const N = 4;
@@ -1111,6 +1129,7 @@ function load(index) {
   for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
     const cell = document.createElement('div');
     cell.className = 'cell' + (grid[r][c] === HOLE ? ' hole' : '');
+    cell.dataset.at = `${r},${c}`;
     if (level.mud && level.mud[r][c] === 'M') cell.classList.add('mud');
     if (level.rail && level.rail.track.some(([tr, tc]) => tr === r && tc === c)) {
       const [[r0], [r1]] = level.rail.track;
@@ -1122,7 +1141,7 @@ function load(index) {
   document.getElementById('levelName').textContent = level.name;
   const tgt = document.getElementById('target'), [tbg, tfg] = COLORS[level.target] || ['#3c3a32', '#fff'];
   tgt.textContent = level.target; tgt.style.background = tbg; tgt.style.color = tfg;
-  shownStars = 3; hinted = false; hintDir = null; shownLost = false;
+  shownStars = 3; hinted = false; hintDir = null; shownLost = false; beforeRestart = null;
   winMemo = new Map();
   setTimeout(buildWinMemo, 30);
   document.getElementById('hint').textContent = level.hint;
@@ -1305,7 +1324,30 @@ function step(dir) {
   checkEnd();
 }
 
+// Restart keeps the board it threw away: Undo on the fresh board brings it back
+// (Undo and Restart sit side by side, so a slip on Restart must not cost the run).
+let beforeRestart = null;
+function restart() {
+  if (finished) return load(LEVELS.indexOf(level));
+  const keep = moves ? { grid, history, moves, hinted, shownStars, shownLost, winnable } : beforeRestart;
+  load(LEVELS.indexOf(level));
+  beforeRestart = keep;
+  document.getElementById('undo').disabled = !keep;
+}
+function undoRestart() {
+  const b = beforeRestart;
+  beforeRestart = null;
+  clearQueue();
+  ({ grid, history, moves, hinted, shownStars, shownLost } = b);
+  hintDir = null;
+  sfx.undo();
+  boardEl.querySelectorAll('.tile').forEach(el => el.remove());
+  setWinnable(b.winnable);
+  render();
+}
+
 function undo() {
+  if (!history.length && beforeRestart && !finished) return undoRestart();
   if (!history.length || finished) return;
   clearQueue();
   grid = history.pop().grid;
@@ -1408,13 +1450,43 @@ function render() {
     Object.assign(ghost.style, pos(nr, nc));
   }
   document.getElementById('moves').textContent = moves;
-  document.getElementById('undo').disabled = !history.length;
+  document.getElementById('undo').disabled = !history.length && !beforeRestart;
   const can = starCap();
   document.getElementById('liveStars').innerHTML = [1, 2, 3].map(k =>
     `<span class="${k > can ? 'off' : ''}${k === can + 1 && can < shownStars ? ' drop' : ''}">★</span>`).join('');
   document.getElementById('par').textContent = can === 3 ? ` / ${level.best}` : can === 2 ? ` / ${level.best + 2}` : '';
   shownStars = can;
+  document.getElementById('hintCost').hidden = can < 3;
+  hideTip();
   updateTutor();
+  saveRun();
+}
+
+// The level being played is kept in this browser after every change, so a reload, a phone
+// closing the tab or the app being killed doesn't lose it: the menu then offers Continue.
+const RUN_KEY = 'puzzle2048-run';
+const FX_KEYS = ['merged', 'melted', 'doubled', 'mudded', 'slid', 'hit', 'unchained'];
+const plain = g => g.map(row => row.map(t => (t && t !== HOLE ? Object.fromEntries(Object.entries(t).filter(([k]) => !FX_KEYS.includes(k))) : t)));
+function saveRun() {
+  try {
+    if (!level || finished || !moves) return localStorage.removeItem(RUN_KEY);
+    localStorage.setItem(RUN_KEY, JSON.stringify({ name: level.name, board: level.board, grid: plain(grid),
+      history: history.map(h => ({ grid: plain(h.grid), winnable: h.winnable })), moves, hinted }));
+  } catch (e) {}
+}
+function readRun() {
+  try { return JSON.parse(localStorage.getItem(RUN_KEY)); } catch (e) { return null; }
+}
+function restoreRun(run) {
+  const i = run ? LEVELS.findIndex(l => l.name === run.name) : -1;
+  // Only if that level is still the same puzzle (levels can change between updates).
+  if (i < 0 || JSON.stringify(LEVELS[i].board) !== JSON.stringify(run.board) || !unlocked(i)) return;
+  load(i);
+  ({ grid, history, moves, hinted } = run);
+  boardEl.querySelectorAll('.tile').forEach(el => el.remove());
+  shownStars = starCap();
+  setWinnable(canWin(grid));
+  render();
 }
 
 // A burst of chips (rock or chain links) flying out of one cell.
@@ -1519,6 +1591,7 @@ function canWin(start) {
 
 function showResult(title, stars, note) {
   finished = true;
+  saveRun();
   setTimeout(() => {
     document.getElementById('resultTitle').textContent = title;
     // Stars pop in one by one, each with its own chime.
@@ -1571,6 +1644,14 @@ document.getElementById('hintBtn').onclick = () => {
   }
   hintDir = nextBestMove();
   if (!hintDir) return;
+  const cost = document.getElementById('hintCost');
+  if (!cost.hidden) {
+    const r = cost.getBoundingClientRect(), fall = cost.cloneNode(true);
+    fall.removeAttribute('id'); fall.className = 'costFall';
+    Object.assign(fall.style, { left: r.left + 'px', top: r.top + 'px' });
+    document.body.appendChild(fall);
+    setTimeout(() => fall.remove(), 750);
+  }
   hinted = true;
   sfx.undo();
   render();
@@ -1591,7 +1672,22 @@ function saveStars(i, stars) {
 const TEST_COPY = /^(192\.168|10)\./.test(location.hostname) || new URLSearchParams(location.search).has('unlock');
 const unlocked = i => TEST_COPY || i === 0 || (progress[i - 1] || 0) > 0;
 
+// A level left half-played (menu opened mid-run) can be picked up again from the menu.
+let inProgress = false;
+function hideMenu() {
+  document.getElementById('menu').classList.remove('show');
+  // Phone back button / back swipe: from a level it returns to the menu instead of leaving the page.
+  if (!(window.history.state && window.history.state.p2048)) window.history.pushState({ p2048: 'game' }, '');
+}
+window.addEventListener('popstate', () => { if (!document.getElementById('menu').classList.contains('show')) showMenu(); });
+function toMenu() {
+  if (window.history.state && window.history.state.p2048) window.history.back(); // popstate opens the menu
+  else showMenu();
+}
+
 function showMenu() {
+  inProgress = !!level && moves > 0 && !finished;
+  clearQueue();
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
   LEVELS.forEach((l, i) => {
@@ -1603,21 +1699,26 @@ function showMenu() {
       ? `${i + 1}<small>${st ? [1, 2, 3].map(k => `<span class="${k <= st ? '' : 'off'}">★</span>`).join('') : ''}</small>`
       : '🔒';
     b.disabled = !open;
-    b.onclick = () => { document.getElementById('menu').classList.remove('show'); load(i); };
+    b.onclick = () => (i === LEVELS.indexOf(level) && inProgress ? hideMenu() : (hideMenu(), load(i)));
     grid.appendChild(b);
   });
   // Play continues at the first level not cleared yet (or the last one once all are done).
   const nextUp = Math.max(0, Math.min(LEVELS.length - 1, LEVELS.findIndex((l, i) => !progress[i]) === -1
     ? LEVELS.length - 1 : LEVELS.findIndex((l, i) => !progress[i])));
   const play = document.getElementById('play');
-  play.textContent = `▶ Play · Level ${nextUp + 1}`;
-  play.onclick = () => { document.getElementById('menu').classList.remove('show'); load(nextUp); };
+  if (inProgress) {
+    play.textContent = `▶ Continue · Level ${LEVELS.indexOf(level) + 1}`;
+    play.onclick = hideMenu;
+  } else {
+    play.textContent = `▶ Play · Level ${nextUp + 1}`;
+    play.onclick = () => { hideMenu(); load(nextUp); };
+  }
   const earned = progress.reduce((a, b) => a + (b || 0), 0);
   document.getElementById('total').textContent = `★ ${earned} / ${LEVELS.length * 3}`;
   document.getElementById('menu').classList.add('show');
 }
-document.getElementById('toMenu').onclick = showMenu;
-document.getElementById('toMenu2').onclick = showMenu;
+document.getElementById('toMenu').onclick = toMenu;
+document.getElementById('toMenu2').onclick = toMenu;
 // Every button ticks; the capture phase runs before the button's own handler.
 // Fast taps: a button fires as soon as the finger lifts, if it is still on the button or within
 // 12px of it (the pressed button sinks 3px, so edge taps used to slip off and get lost). Phones
@@ -1648,16 +1749,94 @@ document.addEventListener('click', e => {
   if (e.isTrusted && e.detail > 0 && performance.now() - fastAt < 600) { e.stopPropagation(); e.preventDefault(); return; }
   if (e.target.closest('button')) sfx.click();
 }, true);
-document.getElementById('restart').onclick = () => load(LEVELS.indexOf(level));
+document.getElementById('restart').onclick = restart;
 document.getElementById('again').onclick = () => load(LEVELS.indexOf(level));
 
 const KEYS = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', a: 'left', d: 'right', w: 'up', s: 'down' };
+// R restart, H hint, Esc menu (Esc on the menu goes back to a level left half-played),
+// Enter/Space = Next level after a win (menu after the last one), or Play/Continue on the menu.
+// Keys held with Cmd/Ctrl/Alt are left to the browser (Cmd+R must still reload), except Cmd/Ctrl+Z = undo.
 document.addEventListener('keydown', e => {
-  if (KEYS[e.key]) { e.preventDefault(); move(KEYS[e.key]); }
-  if (e.key === 'z' || e.key === 'Backspace') undo();
+  // Letters by the key printed on it, or by position when the keyboard types another script
+  // (Thai: Z gives 'ผ'), so shortcuts work without switching the input language.
+  let key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (key.length === 1 && !/[a-z ]/.test(key) && /^Key[A-Z]$/.test(e.code)) key = e.code.slice(3).toLowerCase();
+  if ((e.metaKey || e.ctrlKey) && key === 'z' && !e.shiftKey && !e.altKey) { e.preventDefault(); undo(); return; }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  // Holding a key down repeats it: fine for undo (rewind), but it must not swipe, restart or skip levels.
+  const undoKey = key === 'z' || key === 'Backspace';
+  if (e.repeat && !undoKey) { if (KEYS[key] || key === ' ') e.preventDefault(); return; }
+  const onMenu = document.getElementById('menu').classList.contains('show');
+  if (key === 'Escape') { if (!onMenu) toMenu(); else if (inProgress) hideMenu(); return; }
+  if (key === 'Enter' || key === ' ') {
+    e.preventDefault(); // a focused button would otherwise fire a second time
+    const next = document.getElementById('next');
+    if (onMenu) document.getElementById('play').click();
+    else if (finished && result.classList.contains('show')) next.style.display !== 'none' ? next.click() : toMenu();
+    return;
+  }
+  if (onMenu) return;
+  if (KEYS[key]) { e.preventDefault(); move(KEYS[key]); }
+  if (undoKey) { e.preventDefault(); undo(); }
+  if (key === 'r') restart();
+  if (key === 'h') document.getElementById('hintBtn').onclick();
 });
 // A swipe counts as soon as the finger has travelled 24px (no waiting for it to lift);
 // one move per touch. Touching also wakes the audio so the first sound isn't late.
+// ---- Block rules: hold a block (touch) or rest the mouse on it to see what it does ----
+function ruleAt(r, c) {
+  const t = grid[r][c];
+  if (t === HOLE) return 'Hole: tiles can\'t go here.';
+  if (t && t.ice) return 'Ice: a wall. A merge right next to it melts it into a normal tile.';
+  if (t && t.stone === 2) return 'Stone: blocks the way. Two merges next to it break it.';
+  if (t && t.stone === 1) return 'Cracked stone: one more merge next to it breaks it.';
+  if (t && t.chain) return 'Chains: can\'t move. Slide the same number (or ×2) into it to break the chains.';
+  if (t && t.value === X2) return '×2: doubles any number it merges with.';
+  if (t && t.rail) return 'Steel block: steps along its rail after every swipe.';
+  if (level.mud && level.mud[r][c] === 'M') return 'Mud: a tile that slides in stops there for that swipe.';
+  return '';
+}
+function cellAt(x, y) {
+  const cell = document.elementsFromPoint(x, y).find(el => el.classList && el.classList.contains('cell') && el.dataset.at);
+  return cell ? cell.dataset.at.split(',').map(Number) : null;
+}
+let tipFor = '';
+function hideTip() {
+  tipFor = '';
+  document.getElementById('ruleTip').classList.remove('show');
+  boardEl.querySelectorAll('.tipped').forEach(el => el.classList.remove('tipped'));
+}
+// Shows the rule of the block at (r, c); false when there is nothing special there.
+function showTip(r, c) {
+  const text = ruleAt(r, c);
+  if (!text) { hideTip(); return false; }
+  if (tipFor === `${r},${c}`) return true;
+  hideTip(); tipFor = `${r},${c}`;
+  const t = grid[r][c];
+  const el = (t && t !== HOLE && boardEl.querySelector(`.tile[data-id="${t.id}"]`)) || boardEl.querySelector(`.cell[data-at="${r},${c}"]`);
+  el.classList.add('tipped');
+  const tip = document.getElementById('ruleTip');
+  tip.textContent = text; tip.className = 'show';
+  const br = boardEl.getBoundingClientRect(), er = el.getBoundingClientRect(), mid = er.left - br.left + er.width / 2;
+  const left = Math.max(6, Math.min(br.width - tip.offsetWidth - 6, mid - tip.offsetWidth / 2));
+  const above = er.top - br.top - tip.offsetHeight - 12 >= 0;
+  tip.classList.add(above ? 'above' : 'below');
+  tip.style.left = left + 'px';
+  tip.style.top = (above ? er.top - br.top - tip.offsetHeight - 10 : er.bottom - br.top + 10) + 'px';
+  tip.style.setProperty('--ax', (mid - left) + 'px');
+  return true;
+}
+let holdTimer = null, tipTouch = false, hoverTimer = null;
+boardEl.addEventListener('pointermove', e => {
+  if (e.pointerType !== 'mouse') return;
+  clearTimeout(hoverTimer);
+  const at = cellAt(e.clientX, e.clientY);
+  if (!at || !ruleAt(...at)) { hideTip(); return; }
+  if (tipFor) { showTip(...at); return; } // already showing one: follow the mouse straight away
+  hoverTimer = setTimeout(() => showTip(...at), 350);
+});
+boardEl.addEventListener('pointerleave', () => { clearTimeout(hoverTimer); hideTip(); });
+
 let sx = 0, sy = 0, swiped = false;
 const swipeDir = (dx, dy) => (Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
 // A quick flick counts after only 10px, if its direction is clear (main axis > 2× the other)
@@ -1667,10 +1846,15 @@ document.addEventListener('touchstart', e => {
   sx = e.touches[0].clientX; sy = e.touches[0].clientY; swiped = false;
   st = e.timeStamp; onBtn = !!e.target.closest('button'); // when the finger touched, even if the page was busy
   audio();
+  // Holding still on a special block for 450ms shows its rule; that touch then never swipes.
+  clearTimeout(holdTimer); tipTouch = false;
+  const at = e.touches.length === 1 && !finished && cellAt(sx, sy);
+  if (at && ruleAt(...at)) holdTimer = setTimeout(() => { if (!swiped && showTip(...at)) tipTouch = true; }, 450);
 }, { passive: true });
 document.addEventListener('touchmove', e => {
-  if (swiped) return;
+  if (swiped || tipTouch) return;
   const dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) > 10) clearTimeout(holdTimer);
   const d = Math.max(Math.abs(dx), Math.abs(dy)), side = Math.min(Math.abs(dx), Math.abs(dy));
   const flick = !onBtn && d >= 10 && d > side * 2 && d / Math.max(1, e.timeStamp - st) > 0.5;
   if (d < 24 && !flick) return;
@@ -1678,6 +1862,8 @@ document.addEventListener('touchmove', e => {
   move(swipeDir(dx, dy));
 }, { passive: true });
 document.addEventListener('touchend', e => {
+  clearTimeout(holdTimer);
+  if (tipTouch) { tipTouch = false; hideTip(); return; }
   if (swiped) return;
   const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
   if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
@@ -1692,7 +1878,9 @@ window.addEventListener('resize', () => {
   resizeTimer = setTimeout(() => boardEl.classList.remove('resizing'), 150);
 });
 
+const savedRun = readRun(); // read before load(0), whose render would clear it
 load(0);
+restoreRun(savedRun);
 showMenu();
 </script>
 </body>
