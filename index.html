@@ -220,6 +220,8 @@
     background: #f28b30; color: #fff; font-weight: 800; font-size: clamp(12px, calc(var(--size) * 0.036), 15px);
     padding: 6px 14px; border-radius: 999px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
   #board.lost #warnPill { display: block; animation: pillin 400ms ease; }
+  .controls.bar #hintBtn.nudge { animation: nudge 700ms ease; }
+  @keyframes nudge { 20% { rotate: -10deg; } 40% { rotate: 9deg; } 60% { rotate: -6deg; } 80% { rotate: 3deg; } }
   @keyframes pillin { from { opacity: 0; } to { opacity: 1; } }
   /* Game-screen logo (L4): brown 2048 tiles + orange PUZZLE ribbon. Font = Lilita One (SIL OFL),
      subset to "2048PUZLE" and embedded so the game stays one offline file. */
@@ -1120,7 +1122,7 @@ function load(index) {
   document.getElementById('levelName').textContent = level.name;
   const tgt = document.getElementById('target'), [tbg, tfg] = COLORS[level.target] || ['#3c3a32', '#fff'];
   tgt.textContent = level.target; tgt.style.background = tbg; tgt.style.color = tfg;
-  shownStars = 3; hinted = false; hintDir = null;
+  shownStars = 3; hinted = false; hintDir = null; shownLost = false;
   winMemo = new Map();
   setTimeout(buildWinMemo, 30);
   document.getElementById('hint').textContent = level.hint;
@@ -1227,7 +1229,8 @@ function slide(g, dir) {
       seg.forEach(([r, c], k) => {
         next[r][c] = out[k] || 0;
         const before = g[r][c];
-        if ((before && before.id) !== (out[k] && out[k].id) || (out[k] && out[k].merged)) moved = true;
+        // Empty is 0 on the board but null in out: compare ids only, or every empty cell counts as a move.
+        if ((before ? before.id : 0) !== (out[k] ? out[k].id : 0) || (out[k] && out[k].merged)) moved = true;
       });
       seg = [];
     };
@@ -1336,14 +1339,32 @@ function stepsToWinnable() {
 }
 const undoLabel = n => `undo ${n} move${n > 1 ? 's' : ''}`;
 
-// Soft warning, no popup: orange board edge, a pulsing Undo button and a hint
-// that says how far back the last winnable board is.
+// The game never says the board is lost on its own (players should get to try things);
+// only 💡 tells, with an orange board edge, a pulsing Undo and how far back to go.
 let winnable = true;
 function setWinnable(ok) {
   winnable = ok;
-  boardEl.classList.toggle('lost', !ok);
-  document.getElementById('undo').classList.toggle('urge', !ok);
-  if (!ok) document.getElementById('warnPill').textContent = `No way to win from here · ${undoLabel(stepsToWinnable())}`;
+  if (!moves) quiet = 0;
+  boardEl.classList.remove('lost');
+  document.getElementById('undo').classList.remove('urge');
+  // Once 💡 has said "no way to win", keep saying it (counting down as the player undoes)
+  // until the board can be won again, then it just goes away.
+  if (shownLost && !ok) {
+    document.getElementById('warnPill').textContent = `No way to win from here · ${undoLabel(stepsToWinnable())}`;
+    boardEl.classList.add('lost');
+    document.getElementById('undo').classList.add('urge');
+  } else shownLost = false;
+}
+
+// quiet: swipes in a row where nothing merged, melted or cracked; at QUIET_NUDGE the bulb wiggles.
+// It counts what the player can see, never whether the board is lost, so it gives nothing away.
+const QUIET_NUDGE = 8; // the longest no-merge run in any best line is 7 (level 50): never nudge a right track
+let quiet = 0, shownLost = false;
+const contents = g => stateKey(g).split(/[,/]/).filter(x => x !== '0' && x !== '#').sort().join();
+function nudgeHint() {
+  const b = document.getElementById('hintBtn');
+  b.classList.remove('nudge'); void b.offsetWidth; b.classList.add('nudge');
+  setTimeout(() => b.classList.remove('nudge'), 750);
 }
 
 function starCap() {
@@ -1423,11 +1444,13 @@ function checkEnd() {
     showResult('Level clear!', stars, `${moves} moves · best is ${level.best}`);
     return;
   }
-  const wasWinnable = winnable;
   setWinnable(canWin(grid));
   const canMove = ['left', 'right', 'up', 'down'].some(d => slide(grid, d).moved);
   if (!canMove) showResult('Stuck!', 0, 'Undo or restart to try again');
-  else if (wasWinnable && !winnable) setTimeout(sfx.warn, 200);
+  else {
+    quiet = history.length && contents(history[history.length - 1].grid) === contents(grid) ? quiet + 1 : 0;
+    if (quiet >= QUIET_NUDGE) { quiet = 0; nudgeHint(); }
+  }
 }
 
 // Breadth-first search over every reachable board. With no new tiles the
@@ -1538,7 +1561,14 @@ function nextBestMove() {
 }
 document.getElementById('hintBtn').onclick = () => {
   if (finished || hintDir) return;
-  if (!winnable) { sfx.warn(); return; }
+  if (!winnable) {
+    sfx.warn();
+    shownLost = true;
+    document.getElementById('warnPill').textContent = `No way to win from here · ${undoLabel(stepsToWinnable())}`;
+    boardEl.classList.add('lost');
+    document.getElementById('undo').classList.add('urge');
+    return;
+  }
   hintDir = nextBestMove();
   if (!hintDir) return;
   hinted = true;
@@ -1556,7 +1586,10 @@ function saveStars(i, stars) {
   progress[i] = Math.max(progress[i] || 0, stars);
   try { localStorage.setItem('puzzle2048-stars', JSON.stringify(progress)); } catch (e) {}
 }
-const unlocked = i => i === 0 || (progress[i - 1] || 0) > 0;
+// Test copies open every level: served on the home Wi-Fi (private IP) or opened with ?unlock.
+// Not "anything but github.io": itch.io or an app wrapper would then unlock everything for players.
+const TEST_COPY = /^(192\.168|10)\./.test(location.hostname) || new URLSearchParams(location.search).has('unlock');
+const unlocked = i => TEST_COPY || i === 0 || (progress[i - 1] || 0) > 0;
 
 function showMenu() {
   const grid = document.getElementById('grid');
